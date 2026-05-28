@@ -38,7 +38,7 @@ jobs:
           - '8.0.38'
           - '8.4.9'
           - '10.11.8'
-          - '11.8.3'
+          - '11.8.7'
         connector_name:
           - pymysql
         connector_version:
@@ -69,7 +69,7 @@ jobs:
             db_engine_version: '10.11.8'
 
           - db_engine_name: mysql
-            db_engine_version: '11.8.3'
+            db_engine_version: '11.8.7'
 
           - db_engine_name: mariadb
             db_engine_version: '8.0.38'
