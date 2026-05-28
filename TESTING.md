@@ -38,18 +38,19 @@ The Makefile accept the following options
 - `local_python_version`
   - Mandatory: false
   - Choices:
-    - "3.8"
-    - "3.9"
     - "3.10"
-    - "3.11" (for stable-2.15+)
-  - Description: If `Python -V` shows an unsupported version, use this option to select a compatible Python version available on your system. Use `ls /usr/bin/python3*|grep -v config` to list the available versions (You may have to install one). Unsupported versions are those that are too recent for the Ansible version you are using. In such cases, you will see an error message similar to: 'This version of ansible-test cannot be executed with Python version 3.12.3. Supported Python versions are: 3.9, 3.10, 3.11'.
+    - "3.11"
+    - "3.12"
+  - Description: If `Python -V` shows an unsupported version, use this option to select a compatible Python version available on your system. Use `ls /usr/bin/python3*|grep -v config` to list the available versions (You may have to install one). Unsupported versions are those that are too recent for the Ansible version you are using. In such cases, you will see an error message similar to: 'This version of ansible-test cannot be executed with Python version 3.13. Supported Python versions are: 3.10, 3.11, 3.12'.
 
 - `ansible`
   - Mandatory: true
   - Choices:
-    - "stable-2.15"
-    - "stable-2.16"
     - "stable-2.17"
+    - "stable-2.18"
+    - "stable-2.19"
+    - "stable-2.20"
+    - "stable-2.21"
     - "devel"
   - Description: Version of ansible to install in a venv to run ansible-test
 
@@ -110,14 +111,14 @@ tests will overwrite the 3 databases containers so no need to kill them in advan
 
 ```sh
 # Run all targets
-make ansible="stable-2.16" db_engine_name="mysql" db_engine_version="8.0.31" connector_name="pymysql" connector_version="1.0.2"
+make ansible="stable-2.17" db_engine_name="mysql" db_engine_version="8.0.38" connector_name="pymysql" connector_version="1.0.2"
 
 # A single target
-make ansible="stable-2.16" db_engine_name="mysql" db_engine_version="8.0.31" connector_name="pymysql" connector_version="1.0.2" target="test_mysql_info"
+make ansible="stable-2.17" db_engine_name="mysql" db_engine_version="8.0.38" connector_name="pymysql" connector_version="1.0.2" target="test_mysql_info"
 
 # Keep databases and ansible tests containers alives
 # A single target and continue on errors
-make ansible="stable-2.17" db_engine_name="mysql" db_engine_version="8.0.31" connector_name="pymysql" connector_version="1.0.2" target="test_mysql_query" keep_containers_alive=1 continue_on_errors=1
+make ansible="stable-2.17" db_engine_name="mysql" db_engine_version="8.0.38" connector_name="pymysql" connector_version="1.0.2" target="test_mysql_query" keep_containers_alive=1 continue_on_errors=1
 
 # If your system has an usupported version of Python:
 make local_python_version="3.10" ansible="stable-2.17" db_engine_name="mariadb" db_engine_version="11.8.7" connector_name="pymysql" connector_version="1.0.2"

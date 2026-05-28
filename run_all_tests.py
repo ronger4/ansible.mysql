@@ -73,25 +73,22 @@ def main():
     for ansible in tests_matrix_yaml.get('ansible'):
         for db_engine_name in tests_matrix_yaml.get('db_engine_name'):
             for db_engine_version in tests_matrix_yaml.get('db_engine_version'):
-                for python in tests_matrix_yaml.get('python'):
-                    for connector_name in tests_matrix_yaml.get('connector_name'):
-                        for connector_version in tests_matrix_yaml.get('connector_version'):
-                            test_suite = {
-                                'ansible': ansible,
-                                'db_engine_name': db_engine_name,
-                                'db_engine_version': db_engine_version,
-                                'python': python,
-                                'connector_name': connector_name,
-                                'connector_version': connector_version
-                            }
-                            if not is_exclude(exclude_list, test_suite):
-                                matrix.append(test_suite)
+                for connector_name in tests_matrix_yaml.get('connector_name'):
+                    for connector_version in tests_matrix_yaml.get('connector_version'):
+                        test_suite = {
+                            'ansible': ansible,
+                            'db_engine_name': db_engine_name,
+                            'db_engine_version': db_engine_version,
+                            'connector_name': connector_name,
+                            'connector_version': connector_version
+                        }
+                        if not is_exclude(exclude_list, test_suite):
+                            matrix.append(test_suite)
 
     for tests in matrix:
         a = tests.get('ansible')
         dn = tests.get('db_engine_name')
         dv = tests.get('db_engine_version')
-        p = tests.get('python')
         cn = tests.get('connector_name')
         cv = tests.get('connector_version')
         make_cmd = (
@@ -99,12 +96,11 @@ def main():
             f'ansible="{a}" '
             f'db_engine_name="{dn}" '
             f'db_engine_version="{dv}" '
-            f'python="{p}" '
             f'connector_name="{cn}" '
             f'connector_version="{cv}" '
             f'test-integration'
         )
-        print(f'Run tests for: Ansible: {a}, DB: {dn} {dv}, Python: {p}, Connector: {cn} {cv}')
+        print(f'Run tests for: Ansible: {a}, DB: {dn} {dv}, Connector: {cn} {cv}')
         os.system(make_cmd)
         # TODO, allow for CTRL+C to break the loop more easily
         # TODO, store the failures from this iteration
