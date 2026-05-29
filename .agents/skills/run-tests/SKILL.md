@@ -70,7 +70,7 @@ make ansible="stable-2.17" db_engine_name="mysql" db_engine_version="8.0.38" con
 make ansible="stable-2.17" db_engine_name="mysql" db_engine_version="8.0.38" connector_name="pymysql" connector_version="1.0.2" target="test_mysql_info"
 
 # MariaDB example
-make ansible="stable-2.17" db_engine_name="mariadb" db_engine_version="11.4.5" connector_name="pymysql" connector_version="1.0.2"
+make ansible="stable-2.17" db_engine_name="mariadb" db_engine_version="11.8.7" connector_name="pymysql" connector_version="1.0.2"
 ```
 
 Key Makefile options: `db_engine_name` (mysql/mariadb), `db_engine_version`, `connector_name` (pymysql), `connector_version`, `target` (single test target), `keep_containers_alive=1` (for debugging), `continue_on_errors=1`. See `TESTING.md` for the full list of supported versions and options.
