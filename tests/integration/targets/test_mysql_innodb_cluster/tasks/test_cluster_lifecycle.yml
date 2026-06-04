@@ -1,0 +1,415 @@
+---
+# Test the full InnoDB Cluster lifecycle:
+# create -> verify info -> add instances -> verify info ->
+# set_primary -> switch mode -> remove -> dissolve
+# The info module is used throughout as a verification tool.
+
+- name: Create cluster in check mode
+  check_mode: true
+  ansible.mysql.mysql_innodb_cluster:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_primary_host }}"
+    login_port: "{{ mysql_primary_port }}"
+    mode: create
+    name: "{{ cluster_name }}"
+  register: result
+
+- name: Assert create would change
+  ansible.builtin.assert:
+    that:
+      - result is changed
+
+- name: Create cluster
+  ansible.mysql.mysql_innodb_cluster:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_primary_host }}"
+    login_port: "{{ mysql_primary_port }}"
+    mode: create
+    name: "{{ cluster_name }}"
+    force: true
+  register: result
+
+- name: Assert cluster created
+  ansible.builtin.assert:
+    that:
+      - result is changed
+      - "'created successfully' in result.msg"
+
+- name: Create cluster again (idempotency)
+  ansible.mysql.mysql_innodb_cluster:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_primary_host }}"
+    login_port: "{{ mysql_primary_port }}"
+    mode: create
+    name: "{{ cluster_name }}"
+  register: result
+
+- name: Assert no change on second create
+  ansible.builtin.assert:
+    that:
+      - result is not changed
+
+# Verify cluster state with info module after creation
+- name: Verify cluster info after creation
+  ansible.mysql.mysql_innodb_cluster_info:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_primary_host }}"
+    login_port: "{{ mysql_primary_port }}"
+  register: info_result
+
+- name: Assert cluster info is correct after creation
+  ansible.builtin.assert:
+    that:
+      - info_result is not changed
+      - info_result.cluster_name == cluster_name
+      - info_result.topology_mode is defined
+      - info_result.primary is defined
+      - info_result.members is defined
+      - info_result.members | length == 1
+      - info_result.group_name is defined
+
+- name: Verify info module in check mode returns same data
+  check_mode: true
+  ansible.mysql.mysql_innodb_cluster_info:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_primary_host }}"
+    login_port: "{{ mysql_primary_port }}"
+  register: check_mode_result
+
+- name: Assert check mode info result matches
+  ansible.builtin.assert:
+    that:
+      - check_mode_result is not changed
+      - check_mode_result.cluster_name == cluster_name
+
+# Reset replicas' GTID state so incremental recovery is compatible
+- name: Reset replica1 binary logs for clean GTID state
+  ansible.mysql.mysql_query:
+    login_host: "{{ mysql_replica1_host }}"
+    login_port: "{{ mysql_replica1_port }}"
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    query: "RESET MASTER"
+
+- name: Reset replica2 binary logs for clean GTID state
+  ansible.mysql.mysql_query:
+    login_host: "{{ mysql_replica2_host }}"
+    login_port: "{{ mysql_replica2_port }}"
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    query: "RESET MASTER"
+
+- name: Add replica1 in check mode
+  check_mode: true
+  ansible.mysql.mysql_innodb_cluster:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_primary_host }}"
+    login_port: "{{ mysql_primary_port }}"
+    mode: add_instance
+    instance: "{{ mysql_user }}@{{ mysql_replica1_host }}:{{ mysql_replica1_port }}"
+  register: result
+
+- name: Assert add would change
+  ansible.builtin.assert:
+    that:
+      - result is changed
+
+- name: Add replica1 to cluster
+  ansible.mysql.mysql_innodb_cluster:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_primary_host }}"
+    login_port: "{{ mysql_primary_port }}"
+    mode: add_instance
+    instance: "{{ mysql_user }}@{{ mysql_replica1_host }}:{{ mysql_replica1_port }}"
+    recovery_method: incremental
+  register: result
+
+- name: Assert replica1 added
+  ansible.builtin.assert:
+    that:
+      - result is changed
+
+- name: Add replica1 again (idempotency)
+  ansible.mysql.mysql_innodb_cluster:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_primary_host }}"
+    login_port: "{{ mysql_primary_port }}"
+    mode: add_instance
+    instance: "{{ mysql_user }}@{{ mysql_replica1_host }}:{{ mysql_replica1_port }}"
+  register: result
+
+- name: Assert no change on second add
+  ansible.builtin.assert:
+    that:
+      - result is not changed
+
+- name: Add replica2 to cluster
+  ansible.mysql.mysql_innodb_cluster:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_primary_host }}"
+    login_port: "{{ mysql_primary_port }}"
+    mode: add_instance
+    instance: "{{ mysql_user }}@{{ mysql_replica2_host }}:{{ mysql_replica2_port }}"
+    recovery_method: incremental
+  register: result
+
+- name: Assert replica2 added
+  ansible.builtin.assert:
+    that:
+      - result is changed
+
+# Verify cluster state with info module after adding instances
+- name: Verify cluster info after adding instances
+  ansible.mysql.mysql_innodb_cluster_info:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_primary_host }}"
+    login_port: "{{ mysql_primary_port }}"
+    extended: 1
+  register: info_result
+
+- name: Assert all members present
+  ansible.builtin.assert:
+    that:
+      - info_result.members | length == 3
+      - info_result.raw_status is defined
+
+- name: Assert members have expected fields
+  ansible.builtin.assert:
+    that:
+      - info_result.members[0].address is defined
+      - info_result.members[0].role is defined
+      - info_result.members[0].state is defined
+
+# Test info module filter parameter
+- name: Get cluster info with filter (members only)
+  ansible.mysql.mysql_innodb_cluster_info:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_primary_host }}"
+    login_port: "{{ mysql_primary_port }}"
+    filter:
+      - members
+  register: filtered_result
+
+- name: Assert filtered result has members
+  ansible.builtin.assert:
+    that:
+      - filtered_result.members is defined
+      - filtered_result.members | length == 3
+
+- name: Set replica1 as primary
+  ansible.mysql.mysql_innodb_cluster:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_primary_host }}"
+    login_port: "{{ mysql_primary_port }}"
+    mode: set_primary
+    instance: "{{ mysql_user }}@{{ mysql_replica1_host }}:{{ mysql_replica1_port }}"
+  register: result
+
+- name: Assert primary changed
+  ansible.builtin.assert:
+    that:
+      - result is changed
+
+- name: Set replica1 as primary again (idempotency)
+  ansible.mysql.mysql_innodb_cluster:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_replica1_host }}"
+    login_port: "{{ mysql_replica1_port }}"
+    mode: set_primary
+    instance: "{{ mysql_user }}@{{ mysql_replica1_host }}:{{ mysql_replica1_port }}"
+  register: result
+
+- name: Assert no change
+  ansible.builtin.assert:
+    that:
+      - result is not changed
+
+# Verify primary changed via info module
+- name: Verify new primary via info module
+  ansible.mysql.mysql_innodb_cluster_info:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_replica1_host }}"
+    login_port: "{{ mysql_replica1_port }}"
+  register: info_result
+
+- name: Assert replica1 is now primary
+  ansible.builtin.assert:
+    that:
+      - "'replica1' in info_result.primary"
+
+- name: Switch to multi-primary
+  ansible.mysql.mysql_innodb_cluster:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_replica1_host }}"
+    login_port: "{{ mysql_replica1_port }}"
+    mode: switch_to_multi_primary
+  register: result
+
+- name: Assert switched to multi-primary
+  ansible.builtin.assert:
+    that:
+      - result is changed
+
+- name: Switch to multi-primary again (idempotency)
+  ansible.mysql.mysql_innodb_cluster:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_replica1_host }}"
+    login_port: "{{ mysql_replica1_port }}"
+    mode: switch_to_multi_primary
+  register: result
+
+- name: Assert no change
+  ansible.builtin.assert:
+    that:
+      - result is not changed
+
+# Verify topology mode via info module
+- name: Verify topology mode is multi-primary
+  ansible.mysql.mysql_innodb_cluster_info:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_replica1_host }}"
+    login_port: "{{ mysql_replica1_port }}"
+  register: info_result
+
+- name: Assert multi-primary mode
+  ansible.builtin.assert:
+    that:
+      - "'ulti' in info_result.topology_mode"
+
+- name: Switch back to single-primary
+  ansible.mysql.mysql_innodb_cluster:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_replica1_host }}"
+    login_port: "{{ mysql_replica1_port }}"
+    mode: switch_to_single_primary
+  register: result
+
+- name: Assert switched to single-primary
+  ansible.builtin.assert:
+    that:
+      - result is changed
+
+- name: Remove replica2 in check mode
+  check_mode: true
+  ansible.mysql.mysql_innodb_cluster:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_replica1_host }}"
+    login_port: "{{ mysql_replica1_port }}"
+    mode: remove_instance
+    instance: "{{ mysql_user }}@{{ mysql_replica2_host }}:{{ mysql_replica2_port }}"
+  register: result
+
+- name: Assert remove would change
+  ansible.builtin.assert:
+    that:
+      - result is changed
+
+- name: Remove replica2
+  ansible.mysql.mysql_innodb_cluster:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_replica1_host }}"
+    login_port: "{{ mysql_replica1_port }}"
+    mode: remove_instance
+    instance: "{{ mysql_user }}@{{ mysql_replica2_host }}:{{ mysql_replica2_port }}"
+    force: true
+  register: result
+
+- name: Assert replica2 removed
+  ansible.builtin.assert:
+    that:
+      - result is changed
+
+- name: Remove replica2 again (idempotency)
+  ansible.mysql.mysql_innodb_cluster:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_replica1_host }}"
+    login_port: "{{ mysql_replica1_port }}"
+    mode: remove_instance
+    instance: "{{ mysql_user }}@{{ mysql_replica2_host }}:{{ mysql_replica2_port }}"
+  register: result
+
+- name: Assert no change on second remove
+  ansible.builtin.assert:
+    that:
+      - result is not changed
+
+# Verify member count via info module
+- name: Verify member count after removal
+  ansible.mysql.mysql_innodb_cluster_info:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_replica1_host }}"
+    login_port: "{{ mysql_replica1_port }}"
+  register: info_result
+
+- name: Assert only 2 members remain
+  ansible.builtin.assert:
+    that:
+      - info_result.members | length == 2
+
+- name: Dissolve cluster in check mode
+  check_mode: true
+  ansible.mysql.mysql_innodb_cluster:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_replica1_host }}"
+    login_port: "{{ mysql_replica1_port }}"
+    mode: dissolve
+    force: true
+  register: result
+
+- name: Assert dissolve would change
+  ansible.builtin.assert:
+    that:
+      - result is changed
+
+- name: Dissolve cluster
+  ansible.mysql.mysql_innodb_cluster:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_replica1_host }}"
+    login_port: "{{ mysql_replica1_port }}"
+    mode: dissolve
+    force: true
+  register: result
+
+- name: Assert cluster dissolved
+  ansible.builtin.assert:
+    that:
+      - result is changed
+
+- name: Dissolve cluster again (idempotency)
+  ansible.mysql.mysql_innodb_cluster:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_replica1_host }}"
+    login_port: "{{ mysql_replica1_port }}"
+    mode: dissolve
+    force: true
+  register: result
+
+- name: Assert no change on second dissolve
+  ansible.builtin.assert:
+    that:
+      - result is not changed

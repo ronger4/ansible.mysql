@@ -1,0 +1,88 @@
+---
+# InnoDB Cluster integration tests
+# Run via: make test-integration-innodb-cluster (dedicated Makefile target)
+# This target guarantees GTID and GR prerequisites are configured.
+# Tests only run on MySQL (not MariaDB).
+
+- name: Skip tests if not MySQL
+  when: db_engine is defined and db_engine != 'mysql'
+  ansible.builtin.debug:
+    msg: "Skipping InnoDB Cluster tests - only supported on MySQL"
+
+- name: Check if running via dedicated innodb-cluster target
+  ansible.builtin.stat:
+    path: /root/ansible_collections/ansible/mysql/tests/integration/primary_ip
+  register: ip_file_check
+
+- name: Skip if not running via dedicated target
+  when: not ip_file_check.stat.exists
+  ansible.builtin.debug:
+    msg: >-
+      Skipping InnoDB Cluster tests - not running via dedicated target.
+      Use: make test-integration-innodb-cluster
+
+- name: Run InnoDB Cluster tests
+  when:
+    - db_engine is not defined or db_engine == 'mysql'
+    - ip_file_check.stat.exists
+  block:
+    - name: Check if mysqlsh is already installed
+      ansible.builtin.command: mysqlsh --version
+      changed_when: false
+      failed_when: false
+      register: mysqlsh_check
+
+    - name: Install mysql-shell if not present
+      when: mysqlsh_check.rc != 0
+      block:
+        - name: Add MySQL GPG key
+          ansible.builtin.copy:
+            src: "{{ role_path }}/../setup_controller/files/mysql_pubkey.asc"
+            dest: /etc/apt/trusted.gpg.d/mysql.asc
+            owner: root
+            group: root
+            mode: '0644'
+
+        - name: Install python3-debian for deb822_repository module
+          ansible.builtin.apt:
+            name: python3-debian
+            state: present
+
+        - name: Add MySQL 8.0 repository (includes MySQL Shell)
+          ansible.builtin.deb822_repository:
+            name: mysql
+            types: deb
+            uris: http://repo.mysql.com/apt/ubuntu
+            suites: jammy
+            components:
+              - mysql-8.0
+            signed_by: /etc/apt/trusted.gpg.d/mysql.asc
+            state: present
+
+        - name: Install mysql-shell
+          ansible.builtin.apt:
+            name: mysql-shell
+            state: present
+            update_cache: true
+
+    - name: Verify mysqlsh is available
+      ansible.builtin.command:
+        cmd: mysqlsh --version
+        chdir: /tmp
+      changed_when: false
+      register: mysqlsh_version
+
+    - name: Display mysqlsh version
+      ansible.builtin.debug:
+        msg: "{{ mysqlsh_version.stdout }}"
+
+    - name: Add container hostnames to /etc/hosts for cluster member resolution
+      ansible.builtin.shell:
+        cmd: |
+          echo "{{ mysql_primary_host }} primary" >> /etc/hosts
+          echo "{{ mysql_replica1_host }} replica1" >> /etc/hosts
+          echo "{{ mysql_replica2_host }} replica2" >> /etc/hosts
+      changed_when: true
+
+    - name: Include cluster lifecycle tests
+      ansible.builtin.include_tasks: test_cluster_lifecycle.yml

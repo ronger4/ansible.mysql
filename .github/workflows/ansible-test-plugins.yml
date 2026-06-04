@@ -220,3 +220,129 @@ jobs:
             > tests/integration/ansible
           testing-type: integration
           integration-retry-on-error: false
+
+  # InnoDB Cluster tests run separately because they require GTID and Group
+  # Replication settings that conflict with dump/import tests.
+  integration-innodb-cluster:
+    name: "InnoDB Cluster (Ⓐ${{ matrix.ansible }}, MySQL ${{ matrix.db_engine_version }})"
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        ansible:
+          - stable-2.17
+          - stable-2.21
+        db_engine_version:
+          - '8.0.38'
+          - '8.4.9'
+        connector_name:
+          - pymysql
+        connector_version:
+          - '1.0.2'
+
+    services:
+      db_primary:
+        image: docker.io/library/mysql:${{ matrix.db_engine_version }}
+        env:
+          MYSQL_ROOT_PASSWORD: msandbox
+        ports:
+          - 3307:3306
+        options: >-
+          --hostname primary
+          --health-cmd "mysqladmin ping -P 3306 -pmsandbox | grep alive || exit 1"
+          --health-start-period 10s
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 6
+
+      db_replica1:
+        image: docker.io/library/mysql:${{ matrix.db_engine_version }}
+        env:
+          MYSQL_ROOT_PASSWORD: msandbox
+        ports:
+          - 3308:3306
+        options: >-
+          --hostname replica1
+          --health-cmd "mysqladmin ping -P 3306 -pmsandbox | grep alive || exit 1"
+          --health-start-period 10s
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 6
+
+      db_replica2:
+        image: docker.io/library/mysql:${{ matrix.db_engine_version }}
+        env:
+          MYSQL_ROOT_PASSWORD: msandbox
+        ports:
+          - 3309:3306
+        options: >-
+          --hostname replica2
+          --health-cmd "mysqladmin ping -P 3306 -pmsandbox | grep alive || exit 1"
+          --health-start-period 10s
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 6
+
+    steps:
+      - name: Configure MySQL instances for InnoDB Cluster
+        run: |
+          db_ver="${{ matrix.db_engine_version }}"
+          maj="${db_ver%.*.*}"
+          maj_min="${db_ver%.*}"
+          min="${maj_min#*.}"
+          if [[ "$maj" -eq 8 && "$min" -ge 2 ]]; then
+            gr_conf='[mysqld]\ngtid_mode=ON\nenforce_gtid_consistency=ON\nbinlog_transaction_dependency_tracking=WRITESET\nreplica_parallel_workers=4\nreplica_preserve_commit_order=ON\nmysql-native-password=1'
+          else
+            gr_conf='[mysqld]\ngtid_mode=ON\nenforce_gtid_consistency=ON\nbinlog_transaction_dependency_tracking=WRITESET\nreplica_parallel_workers=4\nreplica_preserve_commit_order=ON'
+          fi
+          docker exec -e cnf="$gr_conf" ${{ job.services.db_primary.id }} bash -c 'echo -e "${cnf}" > /etc/mysql/conf.d/innodb_cluster.cnf'
+          docker exec -e cnf="$gr_conf" ${{ job.services.db_replica1.id }} bash -c 'echo -e "${cnf}" > /etc/mysql/conf.d/innodb_cluster.cnf'
+          docker exec -e cnf="$gr_conf" ${{ job.services.db_replica2.id }} bash -c 'echo -e "${cnf}" > /etc/mysql/conf.d/innodb_cluster.cnf'
+          docker restart ${{ job.services.db_primary.id }}
+          docker restart ${{ job.services.db_replica1.id }}
+          docker restart ${{ job.services.db_replica2.id }}
+
+      - name: Wait for primary to be healthy after restart
+        run: >
+          while ! /usr/bin/docker inspect
+          --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}"
+          ${{ job.services.db_primary.id }}
+          | grep healthy && [[ "$SECONDS" -lt 120 ]]; do sleep 1; done
+
+      - name: Write container IPs for test connectivity
+        run: |
+          echo -n $(docker inspect ${{ job.services.db_primary.id }} --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}') > tests/integration/primary_ip
+          echo -n $(docker inspect ${{ job.services.db_replica1.id }} --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}') > tests/integration/replica1_ip
+          echo -n $(docker inspect ${{ job.services.db_replica2.id }} --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}') > tests/integration/replica2_ip
+
+      - name: Add /etc/hosts entries to containers
+        run: |
+          PRIMARY_IP=$(cat tests/integration/primary_ip)
+          REPLICA1_IP=$(cat tests/integration/replica1_ip)
+          REPLICA2_IP=$(cat tests/integration/replica2_ip)
+          HOSTS="$PRIMARY_IP primary\n$REPLICA1_IP replica1\n$REPLICA2_IP replica2"
+          docker exec ${{ job.services.db_primary.id }} bash -c "echo -e '$HOSTS' >> /etc/hosts"
+          docker exec ${{ job.services.db_replica1.id }} bash -c "echo -e '$HOSTS' >> /etc/hosts"
+          docker exec ${{ job.services.db_replica2.id }} bash -c "echo -e '$HOSTS' >> /etc/hosts"
+
+      - name: >-
+          Run InnoDB Cluster integration tests against
+          Ansible version ${{ matrix.ansible }}
+        uses: ansible-community/ansible-test-gh-action@release/v1
+        with:
+          ansible-core-version: ${{ matrix.ansible }}
+          docker-image: >-
+            ${{ matrix.ansible == 'devel' && 'ubuntu2604' || 'ubuntu2204' }}
+          pre-test-cmd: >-
+            echo -n "mysql" > tests/integration/db_engine_name;
+            echo -n "${{ matrix.db_engine_version }}"
+            > tests/integration/db_engine_version;
+            echo -n "${{ matrix.connector_name }}"
+            > tests/integration/connector_name;
+            echo -n "${{ matrix.connector_version }}"
+            > tests/integration/connector_version;
+            echo -n "${{ matrix.ansible }}"
+            > tests/integration/ansible
+          target: test_mysql_innodb_cluster
+          testing-type: integration
+          integration-retry-on-error: false

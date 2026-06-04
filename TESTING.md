@@ -112,17 +112,56 @@ tests will overwrite the 3 databases containers so no need to kill them in advan
 
 ```sh
 # Run all targets
-make ansible="stable-2.17" db_engine_name="mysql" db_engine_version="8.0.38" connector_name="pymysql" connector_version="1.0.2"
+make test-integration ansible="stable-2.17" db_engine_name="mysql" db_engine_version="8.0.38" connector_name="pymysql" connector_version="1.0.2"
 
 # A single target
-make ansible="stable-2.17" db_engine_name="mysql" db_engine_version="8.0.38" connector_name="pymysql" connector_version="1.0.2" target="test_mysql_info"
+make test-integration ansible="stable-2.17" db_engine_name="mysql" db_engine_version="8.0.38" connector_name="pymysql" connector_version="1.0.2" target="test_mysql_info"
 
 # Keep databases and ansible tests containers alives
 # A single target and continue on errors
-make ansible="stable-2.17" db_engine_name="mysql" db_engine_version="8.0.38" connector_name="pymysql" connector_version="1.0.2" target="test_mysql_query" keep_containers_alive=1 continue_on_errors=1
+make test-integration ansible="stable-2.17" db_engine_name="mysql" db_engine_version="8.0.38" connector_name="pymysql" connector_version="1.0.2" target="test_mysql_query" keep_containers_alive=1 continue_on_errors=1
 
 # If your system has an usupported version of Python:
-make local_python_version="3.10" ansible="stable-2.17" db_engine_name="mariadb" db_engine_version="11.8.7" connector_name="pymysql" connector_version="1.0.2"
+make test-integration local_python_version="3.10" ansible="stable-2.17" db_engine_name="mariadb" db_engine_version="11.8.7" connector_name="pymysql" connector_version="1.0.2"
+```
+
+
+### InnoDB Cluster integration tests
+
+InnoDB Cluster tests require GTID and Group Replication settings that conflict with dump/import tests (specifically `mysql_db`). For this reason, they have a **dedicated Makefile target** and a separate CI job.
+
+The `test-integration-innodb-cluster` target:
+- Starts 3 MySQL containers with `--hostname` for proper cluster member resolution
+- Configures GTID, Group Replication prerequisites, and parallel applier settings
+- Writes container IPs and `/etc/hosts` entries for network connectivity
+- Runs only the `test_mysql_innodb_cluster` target
+
+**Note:** The InnoDB Cluster test skips gracefully when run via the regular `test-integration` target (it detects the absence of the IP files that the dedicated target creates).
+
+#### InnoDB Cluster test options
+
+- `db_engine_version` - MySQL version (8.0.38, 8.4.9). MariaDB is not supported.
+- `connector_name` / `connector_version` - Same as regular tests.
+- `ansible` - Same as regular tests.
+- `keep_containers_alive` - Same as regular tests.
+
+#### InnoDB Cluster usage examples:
+
+```sh
+# Run InnoDB Cluster tests
+make test-integration-innodb-cluster \
+  db_engine_version="8.0.38" \
+  connector_name="pymysql" \
+  connector_version="1.0.2" \
+  ansible="stable-2.17"
+
+# Keep containers alive for debugging
+make test-integration-innodb-cluster \
+  db_engine_version="8.0.38" \
+  connector_name="pymysql" \
+  connector_version="1.0.2" \
+  ansible="stable-2.17" \
+  keep_containers_alive=1
 ```
 
 
