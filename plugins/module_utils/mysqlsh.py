@@ -8,8 +8,6 @@ __metaclass__ = type
 
 import json
 
-from ansible.module_utils.common.text.converters import to_native
-
 
 class MysqlShellError(Exception):
     """Raised when a mysqlsh CLI invocation fails."""

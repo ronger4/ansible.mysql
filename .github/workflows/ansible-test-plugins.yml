@@ -284,6 +284,8 @@ jobs:
           --health-retries 6
 
     steps:
+      - uses: actions/checkout@v6
+
       - name: Configure MySQL instances for InnoDB Cluster
         run: |
           db_ver="${{ matrix.db_engine_version }}"
@@ -309,22 +311,6 @@ jobs:
           ${{ job.services.db_primary.id }}
           | grep healthy && [[ "$SECONDS" -lt 120 ]]; do sleep 1; done
 
-      - name: Write container IPs for test connectivity
-        run: |
-          echo -n $(docker inspect ${{ job.services.db_primary.id }} --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}') > tests/integration/primary_ip
-          echo -n $(docker inspect ${{ job.services.db_replica1.id }} --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}') > tests/integration/replica1_ip
-          echo -n $(docker inspect ${{ job.services.db_replica2.id }} --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}') > tests/integration/replica2_ip
-
-      - name: Add /etc/hosts entries to containers
-        run: |
-          PRIMARY_IP=$(cat tests/integration/primary_ip)
-          REPLICA1_IP=$(cat tests/integration/replica1_ip)
-          REPLICA2_IP=$(cat tests/integration/replica2_ip)
-          HOSTS="$PRIMARY_IP primary\n$REPLICA1_IP replica1\n$REPLICA2_IP replica2"
-          docker exec ${{ job.services.db_primary.id }} bash -c "echo -e '$HOSTS' >> /etc/hosts"
-          docker exec ${{ job.services.db_replica1.id }} bash -c "echo -e '$HOSTS' >> /etc/hosts"
-          docker exec ${{ job.services.db_replica2.id }} bash -c "echo -e '$HOSTS' >> /etc/hosts"
-
       - name: >-
           Run InnoDB Cluster integration tests against
           Ansible version ${{ matrix.ansible }}
@@ -334,6 +320,26 @@ jobs:
           docker-image: >-
             ${{ matrix.ansible == 'devel' && 'ubuntu2604' || 'ubuntu2204' }}
           pre-test-cmd: >-
+            mkdir -p tests/integration;
+            echo -n $(docker inspect ${{ job.services.db_primary.id }}
+            --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+            > tests/integration/primary_ip;
+            echo -n $(docker inspect ${{ job.services.db_replica1.id }}
+            --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+            > tests/integration/replica1_ip;
+            echo -n $(docker inspect ${{ job.services.db_replica2.id }}
+            --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+            > tests/integration/replica2_ip;
+            PRIMARY_IP=$(cat tests/integration/primary_ip);
+            REPLICA1_IP=$(cat tests/integration/replica1_ip);
+            REPLICA2_IP=$(cat tests/integration/replica2_ip);
+            HOSTS="$PRIMARY_IP primary\n$REPLICA1_IP replica1\n$REPLICA2_IP replica2";
+            docker exec ${{ job.services.db_primary.id }}
+            bash -c "echo -e '$HOSTS' >> /etc/hosts";
+            docker exec ${{ job.services.db_replica1.id }}
+            bash -c "echo -e '$HOSTS' >> /etc/hosts";
+            docker exec ${{ job.services.db_replica2.id }}
+            bash -c "echo -e '$HOSTS' >> /etc/hosts";
             echo -n "mysql" > tests/integration/db_engine_name;
             echo -n "${{ matrix.db_engine_version }}"
             > tests/integration/db_engine_version;

@@ -6,7 +6,6 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
-import pytest
 from unittest.mock import patch, MagicMock
 
 from ansible_collections.ansible.mysql.plugins.modules.mysql_innodb_cluster import (
