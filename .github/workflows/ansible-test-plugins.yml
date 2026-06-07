@@ -319,10 +319,10 @@ jobs:
           ansible-core-version: ${{ matrix.ansible }}
           docker-image: >-
             ${{ matrix.ansible == 'devel' && 'ubuntu2604' || 'ubuntu2204' }}
-          pre-test-cmd: |
-            # region agent log
-            echo "agent-debug: pre-test cwd=$(pwd)"
-            # endregion
+          pre-test-cmd: |-
+            # log
+            echo "debug: pre-test cwd=$(pwd)"
+            # endlog
             PRIMARY_IP=$(docker inspect ${{ job.services.db_primary.id }} --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
             REPLICA1_IP=$(docker inspect ${{ job.services.db_replica1.id }} --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
             REPLICA2_IP=$(docker inspect ${{ job.services.db_replica2.id }} --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
@@ -330,10 +330,10 @@ jobs:
             printf '%s' "$PRIMARY_IP" > tests/integration/primary_ip
             printf '%s' "$REPLICA1_IP" > tests/integration/replica1_ip
             printf '%s' "$REPLICA2_IP" > tests/integration/replica2_ip
-            # region agent log
+            # log
             ls -l tests/integration/primary_ip tests/integration/replica1_ip tests/integration/replica2_ip
-            echo "agent-debug: primary=$PRIMARY_IP replica1=$REPLICA1_IP replica2=$REPLICA2_IP"
-            # endregion
+            echo "debug: primary=$PRIMARY_IP replica1=$REPLICA1_IP replica2=$REPLICA2_IP"
+            # endlog
             printf '%s\n%s\n%s\n' \
               "$PRIMARY_IP primary" \
               "$REPLICA1_IP replica1" \
