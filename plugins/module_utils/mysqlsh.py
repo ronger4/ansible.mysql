@@ -189,11 +189,16 @@ def parse_json_output(stdout, stderr, rc):
         pass
 
     metadata_keys = {'info', 'warning', 'note', 'error'}
-    for obj in _parse_jsonl(output):
+    parsed_lines = _parse_jsonl(output)
+    for obj in parsed_lines:
         if set(obj.keys()) - metadata_keys:
             return obj
 
-    return None
+    if parsed_lines:
+        return None
+
+    raise MysqlShellError(f"Failed to parse mysqlsh JSON output: {output}",
+                          rc=rc, stdout=stdout, stderr=stderr)
 
 
 def _extract_error_message(stdout, stderr, rc):

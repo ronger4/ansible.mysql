@@ -319,36 +319,41 @@ jobs:
           ansible-core-version: ${{ matrix.ansible }}
           docker-image: >-
             ${{ matrix.ansible == 'devel' && 'ubuntu2604' || 'ubuntu2204' }}
-          pre-test-cmd: >-
-            mkdir -p tests/integration;
-            echo -n $(docker inspect ${{ job.services.db_primary.id }}
-            --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
-            > tests/integration/primary_ip;
-            echo -n $(docker inspect ${{ job.services.db_replica1.id }}
-            --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
-            > tests/integration/replica1_ip;
-            echo -n $(docker inspect ${{ job.services.db_replica2.id }}
-            --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
-            > tests/integration/replica2_ip;
-            PRIMARY_IP=$(cat tests/integration/primary_ip);
-            REPLICA1_IP=$(cat tests/integration/replica1_ip);
-            REPLICA2_IP=$(cat tests/integration/replica2_ip);
-            HOSTS="$PRIMARY_IP primary\n$REPLICA1_IP replica1\n$REPLICA2_IP replica2";
-            docker exec ${{ job.services.db_primary.id }}
-            bash -c "echo -e '$HOSTS' >> /etc/hosts";
-            docker exec ${{ job.services.db_replica1.id }}
-            bash -c "echo -e '$HOSTS' >> /etc/hosts";
-            docker exec ${{ job.services.db_replica2.id }}
-            bash -c "echo -e '$HOSTS' >> /etc/hosts";
-            echo -n "mysql" > tests/integration/db_engine_name;
-            echo -n "${{ matrix.db_engine_version }}"
-            > tests/integration/db_engine_version;
-            echo -n "${{ matrix.connector_name }}"
-            > tests/integration/connector_name;
-            echo -n "${{ matrix.connector_version }}"
-            > tests/integration/connector_version;
-            echo -n "${{ matrix.ansible }}"
-            > tests/integration/ansible
+          pre-test-cmd: |
+            # region agent log
+            echo "agent-debug: pre-test cwd=$(pwd)"
+            # endregion
+            PRIMARY_IP=$(docker inspect ${{ job.services.db_primary.id }} --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+            REPLICA1_IP=$(docker inspect ${{ job.services.db_replica1.id }} --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+            REPLICA2_IP=$(docker inspect ${{ job.services.db_replica2.id }} --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+            mkdir -p tests/integration
+            printf '%s' "$PRIMARY_IP" > tests/integration/primary_ip
+            printf '%s' "$REPLICA1_IP" > tests/integration/replica1_ip
+            printf '%s' "$REPLICA2_IP" > tests/integration/replica2_ip
+            # region agent log
+            ls -l tests/integration/primary_ip tests/integration/replica1_ip tests/integration/replica2_ip
+            echo "agent-debug: primary=$PRIMARY_IP replica1=$REPLICA1_IP replica2=$REPLICA2_IP"
+            # endregion
+            printf '%s\n%s\n%s\n' \
+              "$PRIMARY_IP primary" \
+              "$REPLICA1_IP replica1" \
+              "$REPLICA2_IP replica2" \
+              | docker exec -i ${{ job.services.db_primary.id }} sh -c 'cat >> /etc/hosts'
+            printf '%s\n%s\n%s\n' \
+              "$PRIMARY_IP primary" \
+              "$REPLICA1_IP replica1" \
+              "$REPLICA2_IP replica2" \
+              | docker exec -i ${{ job.services.db_replica1.id }} sh -c 'cat >> /etc/hosts'
+            printf '%s\n%s\n%s\n' \
+              "$PRIMARY_IP primary" \
+              "$REPLICA1_IP replica1" \
+              "$REPLICA2_IP replica2" \
+              | docker exec -i ${{ job.services.db_replica2.id }} sh -c 'cat >> /etc/hosts'
+            echo -n "mysql" > tests/integration/db_engine_name
+            echo -n "${{ matrix.db_engine_version }}" > tests/integration/db_engine_version
+            echo -n "${{ matrix.connector_name }}" > tests/integration/connector_name
+            echo -n "${{ matrix.connector_version }}" > tests/integration/connector_version
+            echo -n "${{ matrix.ansible }}" > tests/integration/ansible
           target: test_mysql_innodb_cluster
           testing-type: integration
           integration-retry-on-error: false
