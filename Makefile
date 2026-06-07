@@ -187,13 +187,13 @@ test-integration-innodb-cluster:
 	maj_min="$${db_ver%.*}"; \
 	min="$${maj_min#*.}"; \
 	if [[ "$$maj" -eq 8 && "$$min" -ge 2 ]]; then \
-		prima_conf='[mysqld]\\nserver-id=1\\nlog-bin=/var/lib/mysql/primary-bin\\nmysql-native-password=1\\ngtid_mode=ON\\nenforce_gtid_consistency=ON\\nbinlog_transaction_dependency_tracking=WRITESET\\nreplica_parallel_workers=4\\nreplica_preserve_commit_order=ON'; \
-		repl1_conf='[mysqld]\\nserver-id=2\\nlog-bin=/var/lib/mysql/replica1-bin\\nmysql-native-password=1\\ngtid_mode=ON\\nenforce_gtid_consistency=ON\\nbinlog_transaction_dependency_tracking=WRITESET\\nreplica_parallel_workers=4\\nreplica_preserve_commit_order=ON'; \
-		repl2_conf='[mysqld]\\nserver-id=3\\nlog-bin=/var/lib/mysql/replica2-bin\\nmysql-native-password=1\\ngtid_mode=ON\\nenforce_gtid_consistency=ON\\nbinlog_transaction_dependency_tracking=WRITESET\\nreplica_parallel_workers=4\\nreplica_preserve_commit_order=ON'; \
+		prima_conf='[mysqld]\\nserver-id=1\\nlog-bin=/var/lib/mysql/primary-bin\\nmysql-native-password=1\\ngtid_mode=ON\\nenforce_gtid_consistency=ON\\nbinlog_format=ROW\\nlog_replica_updates=ON\\nreplica_parallel_workers=4\\nreplica_preserve_commit_order=ON'; \
+		repl1_conf='[mysqld]\\nserver-id=2\\nlog-bin=/var/lib/mysql/replica1-bin\\nmysql-native-password=1\\ngtid_mode=ON\\nenforce_gtid_consistency=ON\\nbinlog_format=ROW\\nlog_replica_updates=ON\\nreplica_parallel_workers=4\\nreplica_preserve_commit_order=ON'; \
+		repl2_conf='[mysqld]\\nserver-id=3\\nlog-bin=/var/lib/mysql/replica2-bin\\nmysql-native-password=1\\ngtid_mode=ON\\nenforce_gtid_consistency=ON\\nbinlog_format=ROW\\nlog_replica_updates=ON\\nreplica_parallel_workers=4\\nreplica_preserve_commit_order=ON'; \
 	else \
-		prima_conf='[mysqld]\\nserver-id=1\\nlog-bin=/var/lib/mysql/primary-bin\\ngtid_mode=ON\\nenforce_gtid_consistency=ON\\nbinlog_transaction_dependency_tracking=WRITESET\\nreplica_parallel_workers=4\\nreplica_preserve_commit_order=ON'; \
-		repl1_conf='[mysqld]\\nserver-id=2\\nlog-bin=/var/lib/mysql/replica1-bin\\ngtid_mode=ON\\nenforce_gtid_consistency=ON\\nbinlog_transaction_dependency_tracking=WRITESET\\nreplica_parallel_workers=4\\nreplica_preserve_commit_order=ON'; \
-		repl2_conf='[mysqld]\\nserver-id=3\\nlog-bin=/var/lib/mysql/replica2-bin\\ngtid_mode=ON\\nenforce_gtid_consistency=ON\\nbinlog_transaction_dependency_tracking=WRITESET\\nreplica_parallel_workers=4\\nreplica_preserve_commit_order=ON'; \
+		prima_conf='[mysqld]\\nserver-id=1\\nlog-bin=/var/lib/mysql/primary-bin\\ngtid_mode=ON\\nenforce_gtid_consistency=ON\\nbinlog_format=ROW\\nlog_replica_updates=ON\\nreplica_parallel_workers=4\\nreplica_preserve_commit_order=ON'; \
+		repl1_conf='[mysqld]\\nserver-id=2\\nlog-bin=/var/lib/mysql/replica1-bin\\ngtid_mode=ON\\nenforce_gtid_consistency=ON\\nbinlog_format=ROW\\nlog_replica_updates=ON\\nreplica_parallel_workers=4\\nreplica_preserve_commit_order=ON'; \
+		repl2_conf='[mysqld]\\nserver-id=3\\nlog-bin=/var/lib/mysql/replica2-bin\\ngtid_mode=ON\\nenforce_gtid_consistency=ON\\nbinlog_format=ROW\\nlog_replica_updates=ON\\nreplica_parallel_workers=4\\nreplica_preserve_commit_order=ON'; \
 	fi; \
 	podman exec -e cnf="$$prima_conf" primary bash -c 'echo -e "$${cnf//\\n/\n}" > /etc/mysql/conf.d/replication.cnf'; \
 	podman exec -e cnf="$$repl1_conf" replica1 bash -c 'echo -e "$${cnf//\\n/\n}" > /etc/mysql/conf.d/replication.cnf'; \

@@ -89,20 +89,20 @@
 
 # Reset replicas' GTID state so incremental recovery is compatible
 - name: Reset replica1 binary logs for clean GTID state
-  ansible.mysql.mysql_query:
+  ansible.mysql.mysql_replication:
     login_host: "{{ mysql_replica1_host }}"
     login_port: "{{ mysql_replica1_port }}"
     login_user: "{{ mysql_user }}"
     login_password: "{{ mysql_password }}"
-    query: "RESET MASTER"
+    mode: resetprimary
 
 - name: Reset replica2 binary logs for clean GTID state
-  ansible.mysql.mysql_query:
+  ansible.mysql.mysql_replication:
     login_host: "{{ mysql_replica2_host }}"
     login_port: "{{ mysql_replica2_port }}"
     login_user: "{{ mysql_user }}"
     login_password: "{{ mysql_password }}"
-    query: "RESET MASTER"
+    mode: resetprimary
 
 - name: Add replica1 in check mode
   check_mode: true

@@ -293,13 +293,17 @@ jobs:
           maj_min="${db_ver%.*}"
           min="${maj_min#*.}"
           if [[ "$maj" -eq 8 && "$min" -ge 2 ]]; then
-            gr_conf='[mysqld]\ngtid_mode=ON\nenforce_gtid_consistency=ON\nbinlog_transaction_dependency_tracking=WRITESET\nreplica_parallel_workers=4\nreplica_preserve_commit_order=ON\nmysql-native-password=1'
+            prima_conf='[mysqld]\nserver-id=1\nlog-bin=/var/lib/mysql/primary-bin\nmysql-native-password=1\ngtid_mode=ON\nenforce_gtid_consistency=ON\nbinlog_format=ROW\nlog_replica_updates=ON\nreplica_parallel_workers=4\nreplica_preserve_commit_order=ON'
+            repl1_conf='[mysqld]\nserver-id=2\nlog-bin=/var/lib/mysql/replica1-bin\nmysql-native-password=1\ngtid_mode=ON\nenforce_gtid_consistency=ON\nbinlog_format=ROW\nlog_replica_updates=ON\nreplica_parallel_workers=4\nreplica_preserve_commit_order=ON'
+            repl2_conf='[mysqld]\nserver-id=3\nlog-bin=/var/lib/mysql/replica2-bin\nmysql-native-password=1\ngtid_mode=ON\nenforce_gtid_consistency=ON\nbinlog_format=ROW\nlog_replica_updates=ON\nreplica_parallel_workers=4\nreplica_preserve_commit_order=ON'
           else
-            gr_conf='[mysqld]\ngtid_mode=ON\nenforce_gtid_consistency=ON\nbinlog_transaction_dependency_tracking=WRITESET\nreplica_parallel_workers=4\nreplica_preserve_commit_order=ON'
+            prima_conf='[mysqld]\nserver-id=1\nlog-bin=/var/lib/mysql/primary-bin\ngtid_mode=ON\nenforce_gtid_consistency=ON\nbinlog_format=ROW\nlog_replica_updates=ON\nreplica_parallel_workers=4\nreplica_preserve_commit_order=ON'
+            repl1_conf='[mysqld]\nserver-id=2\nlog-bin=/var/lib/mysql/replica1-bin\ngtid_mode=ON\nenforce_gtid_consistency=ON\nbinlog_format=ROW\nlog_replica_updates=ON\nreplica_parallel_workers=4\nreplica_preserve_commit_order=ON'
+            repl2_conf='[mysqld]\nserver-id=3\nlog-bin=/var/lib/mysql/replica2-bin\ngtid_mode=ON\nenforce_gtid_consistency=ON\nbinlog_format=ROW\nlog_replica_updates=ON\nreplica_parallel_workers=4\nreplica_preserve_commit_order=ON'
           fi
-          docker exec -e cnf="$gr_conf" ${{ job.services.db_primary.id }} bash -c 'echo -e "${cnf}" > /etc/mysql/conf.d/innodb_cluster.cnf'
-          docker exec -e cnf="$gr_conf" ${{ job.services.db_replica1.id }} bash -c 'echo -e "${cnf}" > /etc/mysql/conf.d/innodb_cluster.cnf'
-          docker exec -e cnf="$gr_conf" ${{ job.services.db_replica2.id }} bash -c 'echo -e "${cnf}" > /etc/mysql/conf.d/innodb_cluster.cnf'
+          docker exec -e cnf="$prima_conf" ${{ job.services.db_primary.id }} bash -c 'echo -e "${cnf}" > /etc/mysql/conf.d/innodb_cluster.cnf'
+          docker exec -e cnf="$repl1_conf" ${{ job.services.db_replica1.id }} bash -c 'echo -e "${cnf}" > /etc/mysql/conf.d/innodb_cluster.cnf'
+          docker exec -e cnf="$repl2_conf" ${{ job.services.db_replica2.id }} bash -c 'echo -e "${cnf}" > /etc/mysql/conf.d/innodb_cluster.cnf'
           docker restart ${{ job.services.db_primary.id }}
           docker restart ${{ job.services.db_replica1.id }}
           docker restart ${{ job.services.db_replica2.id }}
@@ -320,9 +324,6 @@ jobs:
           docker-image: >-
             ${{ matrix.ansible == 'devel' && 'ubuntu2604' || 'ubuntu2204' }}
           pre-test-cmd: |-
-            # log
-            echo "debug: pre-test cwd=$(pwd)"
-            # endlog
             PRIMARY_IP=$(docker inspect ${{ job.services.db_primary.id }} --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
             REPLICA1_IP=$(docker inspect ${{ job.services.db_replica1.id }} --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
             REPLICA2_IP=$(docker inspect ${{ job.services.db_replica2.id }} --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
@@ -330,10 +331,6 @@ jobs:
             printf '%s' "$PRIMARY_IP" > tests/integration/primary_ip
             printf '%s' "$REPLICA1_IP" > tests/integration/replica1_ip
             printf '%s' "$REPLICA2_IP" > tests/integration/replica2_ip
-            # log
-            ls -l tests/integration/primary_ip tests/integration/replica1_ip tests/integration/replica2_ip
-            echo "debug: primary=$PRIMARY_IP replica1=$REPLICA1_IP replica2=$REPLICA2_IP"
-            # endlog
             printf '%s\n%s\n%s\n' \
               "$PRIMARY_IP primary" \
               "$REPLICA1_IP replica1" \

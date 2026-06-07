@@ -10,12 +10,18 @@
     msg: "Skipping InnoDB Cluster tests - only supported on MySQL"
 
 - name: Check if running via dedicated innodb-cluster target
-  ansible.builtin.stat:
-    path: /root/ansible_collections/ansible/mysql/tests/integration/primary_ip
-  register: ip_file_check
+  ansible.builtin.set_fact:
+    innodb_cluster_primary_ip: >-
+      {{
+        lookup(
+          'file',
+          '/root/ansible_collections/ansible/mysql/tests/integration/primary_ip',
+          errors='ignore'
+        ) | trim
+      }}
 
 - name: Skip if not running via dedicated target
-  when: not ip_file_check.stat.exists
+  when: innodb_cluster_primary_ip | length == 0
   ansible.builtin.debug:
     msg: >-
       Skipping InnoDB Cluster tests - not running via dedicated target.
@@ -24,7 +30,7 @@
 - name: Run InnoDB Cluster tests
   when:
     - db_engine is not defined or db_engine == 'mysql'
-    - ip_file_check.stat.exists
+    - innodb_cluster_primary_ip | length > 0
   block:
     - name: Check if mysqlsh is already installed
       ansible.builtin.command: mysqlsh --version
@@ -32,8 +38,19 @@
       failed_when: false
       register: mysqlsh_check
 
+    - name: Decide whether mysqlsh installation or upgrade is needed
+      ansible.builtin.set_fact:
+        mysqlsh_needs_install: >-
+          {{
+            mysqlsh_check.rc != 0 or
+            (
+              db_version is version('8.4', '>=')
+              and not (mysqlsh_check.stdout is search('Ver (8\\.4|9\\.)'))
+            )
+          }}
+
     - name: Install mysql-shell if not present
-      when: mysqlsh_check.rc != 0
+      when: mysqlsh_needs_install
       block:
         - name: Add MySQL GPG key
           ansible.builtin.copy:
@@ -48,14 +65,14 @@
             name: python3-debian
             state: present
 
-        - name: Add MySQL 8.0 repository (includes MySQL Shell)
+        - name: Add MySQL repository for the required Shell version
           ansible.builtin.deb822_repository:
             name: mysql
             types: deb
             uris: http://repo.mysql.com/apt/ubuntu
             suites: jammy
             components:
-              - mysql-8.0
+              - "{{ db_version is version('8.4', '>=') | ternary('mysql-8.4-lts', 'mysql-8.0') }}"
             signed_by: /etc/apt/trusted.gpg.d/mysql.asc
             state: present
 
@@ -83,6 +100,34 @@
           echo "{{ mysql_replica1_host }} replica1" >> /etc/hosts
           echo "{{ mysql_replica2_host }} replica2" >> /etc/hosts
       changed_when: true
+
+    - name: Configure instances for InnoDB Cluster with mysqlsh
+      ansible.builtin.command: >-
+        mysqlsh {{ mysql_user }}@{{ item.host }}:{{ item.port }}
+        --password={{ mysql_password }}
+        --no-wizard -- dba configure-instance --restart=true
+      args:
+        chdir: /tmp
+      loop:
+        - { host: "{{ mysql_primary_host }}", port: "{{ mysql_primary_port }}" }
+        - { host: "{{ mysql_replica1_host }}", port: "{{ mysql_replica1_port }}" }
+        - { host: "{{ mysql_replica2_host }}", port: "{{ mysql_replica2_port }}" }
+      loop_control:
+        label: "{{ item.host }}:{{ item.port }}"
+      register: configure_instances_result
+      changed_when: true
+
+    - name: Wait for configured instances to restart
+      ansible.builtin.wait_for:
+        host: "{{ item.host }}"
+        port: "{{ item.port }}"
+        timeout: 60
+      loop:
+        - { host: "{{ mysql_primary_host }}", port: "{{ mysql_primary_port }}" }
+        - { host: "{{ mysql_replica1_host }}", port: "{{ mysql_replica1_port }}" }
+        - { host: "{{ mysql_replica2_host }}", port: "{{ mysql_replica2_port }}" }
+      loop_control:
+        label: "{{ item.host }}:{{ item.port }}"
 
     - name: Include cluster lifecycle tests
       ansible.builtin.include_tasks: test_cluster_lifecycle.yml
