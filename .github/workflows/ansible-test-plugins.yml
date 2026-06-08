@@ -162,12 +162,22 @@ jobs:
 
       - name: Restart MySQL server with settings for replication
         run: |
-          ./tests/integration/harness/generate_mysql_config.sh --server-id 1 --profile replication --db-version "${{ matrix.db_engine_version }}" \
-            | docker exec -i ${{ job.services.db_primary.id }} sh -c 'cat > /etc/mysql/conf.d/replication.cnf'
-          ./tests/integration/harness/generate_mysql_config.sh --server-id 2 --profile replication --db-version "${{ matrix.db_engine_version }}" \
-            | docker exec -i ${{ job.services.db_replica1.id }} sh -c 'cat > /etc/mysql/conf.d/replication.cnf'
-          ./tests/integration/harness/generate_mysql_config.sh --server-id 3 --profile replication --db-version "${{ matrix.db_engine_version }}" \
-            | docker exec -i ${{ job.services.db_replica2.id }} sh -c 'cat > /etc/mysql/conf.d/replication.cnf'
+          db_ver="${{ matrix.db_engine_version }}"
+          maj="${db_ver%.*.*}"
+          maj_min="${db_ver%.*}"
+          min="${maj_min#*.}"
+          if [[ "${{ matrix.db_engine_name }}" == "mysql" && "$maj" -eq 8 && "$min" -ge 2 ]]; then
+            prima_conf='[mysqld]\\nserver-id=1\\nlog-bin=/var/lib/mysql/primary-bin\\nmysql-native-password=1'
+            repl1_conf='[mysqld]\\nserver-id=2\\nlog-bin=/var/lib/mysql/replica1-bin\\nmysql-native-password=1'
+            repl2_conf='[mysqld]\\nserver-id=3\\nlog-bin=/var/lib/mysql/replica2-bin\\nmysql-native-password=1'
+          else
+            prima_conf='[mysqld]\\nserver-id=1\\nlog-bin=/var/lib/mysql/primary-bin'
+            repl1_conf='[mysqld]\\nserver-id=2\\nlog-bin=/var/lib/mysql/replica1-bin'
+            repl2_conf='[mysqld]\\nserver-id=3\\nlog-bin=/var/lib/mysql/replica2-bin'
+          fi
+          docker exec -e cnf=$prima_conf ${{ job.services.db_primary.id }} bash -c 'echo -e ${cnf//\\n/\n} > /etc/mysql/conf.d/replication.cnf'
+          docker exec -e cnf=$repl1_conf ${{ job.services.db_replica1.id }} bash -c 'echo -e ${cnf//\\n/\n} > /etc/mysql/conf.d/replication.cnf'
+          docker exec -e cnf=$repl2_conf ${{ job.services.db_replica2.id }} bash -c 'echo -e ${cnf//\\n/\n} > /etc/mysql/conf.d/replication.cnf'
           docker restart -t 30 ${{ job.services.db_primary.id }}
           docker restart -t 30 ${{ job.services.db_replica1.id }}
           docker restart -t 30 ${{ job.services.db_replica2.id }}
@@ -278,12 +288,22 @@ jobs:
 
       - name: Configure MySQL instances for InnoDB Cluster
         run: |
-          ./tests/integration/harness/generate_mysql_config.sh --server-id 1 --profile innodb_cluster --db-version "${{ matrix.db_engine_version }}" \
-            | docker exec -i ${{ job.services.db_primary.id }} sh -c 'cat > /etc/mysql/conf.d/replication.cnf'
-          ./tests/integration/harness/generate_mysql_config.sh --server-id 2 --profile innodb_cluster --db-version "${{ matrix.db_engine_version }}" \
-            | docker exec -i ${{ job.services.db_replica1.id }} sh -c 'cat > /etc/mysql/conf.d/replication.cnf'
-          ./tests/integration/harness/generate_mysql_config.sh --server-id 3 --profile innodb_cluster --db-version "${{ matrix.db_engine_version }}" \
-            | docker exec -i ${{ job.services.db_replica2.id }} sh -c 'cat > /etc/mysql/conf.d/replication.cnf'
+          db_ver="${{ matrix.db_engine_version }}"
+          maj="${db_ver%.*.*}"
+          maj_min="${db_ver%.*}"
+          min="${maj_min#*.}"
+          if [[ "$maj" -eq 8 && "$min" -ge 2 ]]; then
+            prima_conf='[mysqld]\nserver-id=1\nlog-bin=/var/lib/mysql/primary-bin\nmysql-native-password=1\ngtid_mode=ON\nenforce_gtid_consistency=ON\nbinlog_format=ROW\nlog_replica_updates=ON\nreplica_parallel_workers=4\nreplica_preserve_commit_order=ON'
+            repl1_conf='[mysqld]\nserver-id=2\nlog-bin=/var/lib/mysql/replica1-bin\nmysql-native-password=1\ngtid_mode=ON\nenforce_gtid_consistency=ON\nbinlog_format=ROW\nlog_replica_updates=ON\nreplica_parallel_workers=4\nreplica_preserve_commit_order=ON'
+            repl2_conf='[mysqld]\nserver-id=3\nlog-bin=/var/lib/mysql/replica2-bin\nmysql-native-password=1\ngtid_mode=ON\nenforce_gtid_consistency=ON\nbinlog_format=ROW\nlog_replica_updates=ON\nreplica_parallel_workers=4\nreplica_preserve_commit_order=ON'
+          else
+            prima_conf='[mysqld]\nserver-id=1\nlog-bin=/var/lib/mysql/primary-bin\ngtid_mode=ON\nenforce_gtid_consistency=ON\nbinlog_format=ROW\nlog_replica_updates=ON\nreplica_parallel_workers=4\nreplica_preserve_commit_order=ON'
+            repl1_conf='[mysqld]\nserver-id=2\nlog-bin=/var/lib/mysql/replica1-bin\ngtid_mode=ON\nenforce_gtid_consistency=ON\nbinlog_format=ROW\nlog_replica_updates=ON\nreplica_parallel_workers=4\nreplica_preserve_commit_order=ON'
+            repl2_conf='[mysqld]\nserver-id=3\nlog-bin=/var/lib/mysql/replica2-bin\ngtid_mode=ON\nenforce_gtid_consistency=ON\nbinlog_format=ROW\nlog_replica_updates=ON\nreplica_parallel_workers=4\nreplica_preserve_commit_order=ON'
+          fi
+          docker exec -e cnf="$prima_conf" ${{ job.services.db_primary.id }} bash -c 'echo -e "${cnf}" > /etc/mysql/conf.d/replication.cnf'
+          docker exec -e cnf="$repl1_conf" ${{ job.services.db_replica1.id }} bash -c 'echo -e "${cnf}" > /etc/mysql/conf.d/replication.cnf'
+          docker exec -e cnf="$repl2_conf" ${{ job.services.db_replica2.id }} bash -c 'echo -e "${cnf}" > /etc/mysql/conf.d/replication.cnf'
           docker restart ${{ job.services.db_primary.id }}
           docker restart ${{ job.services.db_replica1.id }}
           docker restart ${{ job.services.db_replica2.id }}

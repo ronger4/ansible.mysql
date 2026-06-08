@@ -78,17 +78,6 @@ define cleanup_containers
 	fi
 endef
 
-# Write per-instance mysqld config using the shared harness script.
-# $(1) = profile (replication or innodb_cluster)
-# $(2) = db version
-define configure_mysql_instances
-	@./tests/integration/harness/generate_mysql_config.sh --server-id 1 --profile $(1) --db-version $(2) \
-		| podman exec -i primary sh -c 'cat > /etc/mysql/conf.d/replication.cnf'
-	@./tests/integration/harness/generate_mysql_config.sh --server-id 2 --profile $(1) --db-version $(2) \
-		| podman exec -i replica1 sh -c 'cat > /etc/mysql/conf.d/replication.cnf'
-	@./tests/integration/harness/generate_mysql_config.sh --server-id 3 --profile $(1) --db-version $(2) \
-		| podman exec -i replica2 sh -c 'cat > /etc/mysql/conf.d/replication.cnf'
-endef
 
 .PHONY: test-integration
 test-integration:
@@ -129,7 +118,23 @@ test-integration:
 		--health-cmd '$(_health_cmd) ping -P 3306 -pmsandbox | grep alive || exit 1' \
 		docker.io/library/$(db_engine_name):$(db_engine_version) \
 		$(_command)
-	$(call configure_mysql_instances,replication,$(db_engine_version))
+	# Setup replication and restart containers using the same subshell to keep variables alive
+	db_ver=$(db_engine_version); \
+	maj="$${db_ver%.*.*}"; \
+	maj_min="$${db_ver%.*}"; \
+	min="$${maj_min#*.}"; \
+	if [[ "$(db_engine_name)" == "mysql" && "$$maj" -eq 8 && "$$min" -ge 2 ]]; then \
+		prima_conf='[mysqld]\\nserver-id=1\\nlog-bin=/var/lib/mysql/primary-bin\\nmysql-native-password=1'; \
+		repl1_conf='[mysqld]\\nserver-id=2\\nlog-bin=/var/lib/mysql/replica1-bin\\nmysql-native-password=1'; \
+		repl2_conf='[mysqld]\\nserver-id=3\\nlog-bin=/var/lib/mysql/replica2-bin\\nmysql-native-password=1'; \
+	else \
+		prima_conf='[mysqld]\\nserver-id=1\\nlog-bin=/var/lib/mysql/primary-bin'; \
+		repl1_conf='[mysqld]\\nserver-id=2\\nlog-bin=/var/lib/mysql/replica1-bin'; \
+		repl2_conf='[mysqld]\\nserver-id=3\\nlog-bin=/var/lib/mysql/replica2-bin'; \
+	fi; \
+	podman exec -e cnf="$$prima_conf" primary bash -c 'echo -e "$${cnf//\\n/\n}" > /etc/mysql/conf.d/replication.cnf'; \
+	podman exec -e cnf="$$repl1_conf" replica1 bash -c 'echo -e "$${cnf//\\n/\n}" > /etc/mysql/conf.d/replication.cnf'; \
+	podman exec -e cnf="$$repl2_conf" replica2 bash -c 'echo -e "$${cnf//\\n/\n}" > /etc/mysql/conf.d/replication.cnf'
 	$(call wait_healthy_and_restart)
 	# Run tests
 	$(call run_ansible_test,$(target))
@@ -177,7 +182,23 @@ test-integration-innodb-cluster:
 		--health-cmd 'mysqladmin ping -P 3306 -pmsandbox | grep alive || exit 1' \
 		docker.io/library/mysql:$(db_engine_version) \
 		mysqld
-	$(call configure_mysql_instances,innodb_cluster,$(db_engine_version))
+	# Configure MySQL for InnoDB Cluster (GTID + GR prerequisites)
+	db_ver=$(db_engine_version); \
+	maj="$${db_ver%.*.*}"; \
+	maj_min="$${db_ver%.*}"; \
+	min="$${maj_min#*.}"; \
+	if [[ "$$maj" -eq 8 && "$$min" -ge 2 ]]; then \
+		prima_conf='[mysqld]\\nserver-id=1\\nlog-bin=/var/lib/mysql/primary-bin\\nmysql-native-password=1\\ngtid_mode=ON\\nenforce_gtid_consistency=ON\\nbinlog_format=ROW\\nlog_replica_updates=ON\\nreplica_parallel_workers=4\\nreplica_preserve_commit_order=ON'; \
+		repl1_conf='[mysqld]\\nserver-id=2\\nlog-bin=/var/lib/mysql/replica1-bin\\nmysql-native-password=1\\ngtid_mode=ON\\nenforce_gtid_consistency=ON\\nbinlog_format=ROW\\nlog_replica_updates=ON\\nreplica_parallel_workers=4\\nreplica_preserve_commit_order=ON'; \
+		repl2_conf='[mysqld]\\nserver-id=3\\nlog-bin=/var/lib/mysql/replica2-bin\\nmysql-native-password=1\\ngtid_mode=ON\\nenforce_gtid_consistency=ON\\nbinlog_format=ROW\\nlog_replica_updates=ON\\nreplica_parallel_workers=4\\nreplica_preserve_commit_order=ON'; \
+	else \
+		prima_conf='[mysqld]\\nserver-id=1\\nlog-bin=/var/lib/mysql/primary-bin\\ngtid_mode=ON\\nenforce_gtid_consistency=ON\\nbinlog_format=ROW\\nlog_replica_updates=ON\\nreplica_parallel_workers=4\\nreplica_preserve_commit_order=ON'; \
+		repl1_conf='[mysqld]\\nserver-id=2\\nlog-bin=/var/lib/mysql/replica1-bin\\ngtid_mode=ON\\nenforce_gtid_consistency=ON\\nbinlog_format=ROW\\nlog_replica_updates=ON\\nreplica_parallel_workers=4\\nreplica_preserve_commit_order=ON'; \
+		repl2_conf='[mysqld]\\nserver-id=3\\nlog-bin=/var/lib/mysql/replica2-bin\\ngtid_mode=ON\\nenforce_gtid_consistency=ON\\nbinlog_format=ROW\\nlog_replica_updates=ON\\nreplica_parallel_workers=4\\nreplica_preserve_commit_order=ON'; \
+	fi; \
+	podman exec -e cnf="$$prima_conf" primary bash -c 'echo -e "$${cnf//\\n/\n}" > /etc/mysql/conf.d/replication.cnf'; \
+	podman exec -e cnf="$$repl1_conf" replica1 bash -c 'echo -e "$${cnf//\\n/\n}" > /etc/mysql/conf.d/replication.cnf'; \
+	podman exec -e cnf="$$repl2_conf" replica2 bash -c 'echo -e "$${cnf//\\n/\n}" > /etc/mysql/conf.d/replication.cnf'
 	$(call wait_healthy_and_restart)
 	# Write container IPs after restart (podman may reassign IPs)
 	@echo -n $$(podman inspect primary --format '{{.NetworkSettings.Networks.podman.IPAddress}}') > tests/integration/primary_ip
