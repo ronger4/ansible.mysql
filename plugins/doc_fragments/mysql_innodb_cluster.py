@@ -45,16 +45,19 @@ options:
   ca_cert:
     description:
       - The path to a Certificate Authority (CA) certificate for SSL connections.
+      - "B(Not yet implemented.) Accepted for forward compatibility but currently ignored."
     type: path
     aliases: [ ssl_ca ]
   client_cert:
     description:
       - The path to a client public key certificate for SSL connections.
+      - "B(Not yet implemented.) Accepted for forward compatibility but currently ignored."
     type: path
     aliases: [ ssl_cert ]
   client_key:
     description:
       - The path to the client private key for SSL connections.
+      - "B(Not yet implemented.) Accepted for forward compatibility but currently ignored."
     type: path
     aliases: [ ssl_key ]
 requirements:

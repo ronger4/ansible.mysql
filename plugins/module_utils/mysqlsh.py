@@ -39,27 +39,31 @@ def find_mysqlsh(module, mysqlsh_path=None):
     return path
 
 
-def build_uri(user, password, host, port, socket=None, ssl_opts=None):
+def build_uri(user, host, port, socket=None):
     """Build a mysqlsh connection URI string.
 
     Args:
         user: MySQL username.
-        password: MySQL password.
         host: MySQL host.
         port: MySQL port.
         socket: Unix socket path (overrides host/port when set).
-        ssl_opts: Dict with optional keys: ca_cert, client_cert, client_key.
 
     Returns:
-        tuple: (uri_string, password) where password is passed separately
-               to avoid embedding it in the URI.
+        str: URI string in the form user@host:port or user@localhost?socket=path.
     """
     if socket:
-        uri = f"{user}@localhost?socket={socket}"
-    else:
-        uri = f"{user}@{host}:{port}"
+        return f"{user}@localhost?socket={socket}"
+    return f"{user}@{host}:{port}"
 
-    return uri, password
+
+def _build_base_cmd(mysqlsh_path, uri, password):
+    """Build the common mysqlsh command prefix (connection, JSON, no-wizard)."""
+    cmd = [mysqlsh_path, uri, '--json=raw', '--no-wizard']
+    if password:
+        cmd.append(f'--password={password}')
+    else:
+        cmd.append('--no-password')
+    return cmd
 
 
 def run_mysqlsh(module, mysqlsh_path, uri, password, shell_object, method,
@@ -85,20 +89,12 @@ def run_mysqlsh(module, mysqlsh_path, uri, password, shell_object, method,
         MysqlShellError: If the command returns a non-zero exit code or
                          produces unparseable output.
     """
-    cmd = [mysqlsh_path, uri, '--json=raw', '--no-wizard']
-
-    if password:
-        cmd.append(f'--password={password}')
-    else:
-        cmd.append('--no-password')
-
+    cmd = _build_base_cmd(mysqlsh_path, uri, password)
     cmd.extend(['--', shell_object, method])
-
     if args:
         cmd.extend(args)
 
     rc, stdout, stderr = module.run_command(cmd, cwd='/tmp')
-
     return parse_json_output(stdout, stderr, rc)
 
 
@@ -121,17 +117,10 @@ def run_mysqlsh_script(module, mysqlsh_path, uri, password, script):
     Raises:
         MysqlShellError: On failure.
     """
-    cmd = [mysqlsh_path, uri, '--json=raw', '--no-wizard', '--py']
-
-    if password:
-        cmd.append(f'--password={password}')
-    else:
-        cmd.append('--no-password')
-
-    cmd.extend(['-e', script])
+    cmd = _build_base_cmd(mysqlsh_path, uri, password)
+    cmd.extend(['--py', '-e', script])
 
     rc, stdout, stderr = module.run_command(cmd, cwd='/tmp')
-
     return parse_json_output(stdout, stderr, rc)
 
 

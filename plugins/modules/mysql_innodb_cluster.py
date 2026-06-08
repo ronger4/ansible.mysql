@@ -622,11 +622,10 @@ def main():
     mode = module.params['mode']
 
     mysqlsh_path = find_mysqlsh(module, mysqlsh_path_param)
-    uri, password = build_uri(login_user, login_password, login_host,
-                              login_port, login_unix_socket)
+    uri = build_uri(login_user, login_host, login_port, login_unix_socket)
 
     handler = MODE_HANDLERS[mode]
-    handler(module, mysqlsh_path, uri, password, module.params)
+    handler(module, mysqlsh_path, uri, login_password, module.params)
 
 
 if __name__ == '__main__':

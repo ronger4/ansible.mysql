@@ -280,10 +280,9 @@ def main():
     extended = module.params['extended']
 
     mysqlsh_path = find_mysqlsh(module, mysqlsh_path_param)
-    uri, password = build_uri(login_user, login_password, login_host,
-                              login_port, login_unix_socket)
+    uri = build_uri(login_user, login_host, login_port, login_unix_socket)
 
-    status_data = get_cluster_status(module, mysqlsh_path, uri, password,
+    status_data = get_cluster_status(module, mysqlsh_path, uri, login_password,
                                      name, extended)
 
     if status_data is None:
@@ -314,7 +313,7 @@ def main():
         result['routers'] = extract_routers(status_data)
 
     if should_include_all or 'options' in filter_:
-        options_data = get_cluster_options(module, mysqlsh_path, uri, password)
+        options_data = get_cluster_options(module, mysqlsh_path, uri, login_password)
         result['cluster_options'] = options_data
 
     module.exit_json(**result)

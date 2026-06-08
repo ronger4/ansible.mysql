@@ -18,30 +18,17 @@ from ansible_collections.ansible.mysql.plugins.module_utils.mysqlsh import (
 
 class TestBuildUri:
     def test_basic_uri(self):
-        uri, password = build_uri('root', 'secret', 'dbhost', 3306)
+        uri = build_uri('root', 'dbhost', 3306)
         assert uri == 'root@dbhost:3306'
-        assert password == 'secret'
 
     def test_custom_port(self):
-        uri, password = build_uri('admin', 'pass', '192.168.1.10', 3307)
+        uri = build_uri('admin', '192.168.1.10', 3307)
         assert uri == 'admin@192.168.1.10:3307'
-        assert password == 'pass'
 
     def test_socket_overrides_host(self):
-        uri, password = build_uri('root', 'secret', 'dbhost', 3306,
-                                  socket='/var/run/mysqld/mysqld.sock')
+        uri = build_uri('root', 'dbhost', 3306,
+                         socket='/var/run/mysqld/mysqld.sock')
         assert uri == 'root@localhost?socket=/var/run/mysqld/mysqld.sock'
-        assert password == 'secret'
-
-    def test_empty_password(self):
-        uri, password = build_uri('root', '', 'localhost', 3306)
-        assert uri == 'root@localhost:3306'
-        assert password == ''
-
-    def test_none_password(self):
-        uri, password = build_uri('root', None, 'localhost', 3306)
-        assert uri == 'root@localhost:3306'
-        assert password is None
 
 
 class TestParseJsonOutput:
