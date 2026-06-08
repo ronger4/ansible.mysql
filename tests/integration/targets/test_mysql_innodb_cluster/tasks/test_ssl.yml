@@ -1,0 +1,70 @@
+---
+# SSL integration tests for mysql_innodb_cluster and mysql_innodb_cluster_info.
+# MySQL 8.0+ enables SSL by default with auto-generated certificates,
+# so these tests always run on the dedicated InnoDB Cluster containers.
+
+- name: SSL | Extract server certificate from primary
+  ansible.builtin.command:
+    cmd: >-
+      openssl s_client -starttls mysql
+      -connect {{ mysql_primary_host }}:{{ mysql_primary_port }}
+      -showcerts
+    stdin: ""
+  register: cert_raw
+  changed_when: false
+  failed_when: false
+
+- name: SSL | Write certificate to file
+  ansible.builtin.copy:
+    content: >-
+      {{ cert_raw.stdout
+         | regex_search('-----BEGIN CERTIFICATE-----[\s\S]*-----END CERTIFICATE-----') }}
+    dest: /tmp/innodb_cluster_cert.pem
+    mode: '0644'
+
+- name: SSL | Create cluster with ca_cert
+  ansible.mysql.mysql_innodb_cluster:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_primary_host }}"
+    login_port: "{{ mysql_primary_port }}"
+    ca_cert: /tmp/innodb_cluster_cert.pem
+    mode: create
+    name: "{{ cluster_name }}"
+    force: true
+  register: ssl_create_result
+
+- name: SSL | Assert cluster created with SSL
+  ansible.builtin.assert:
+    that:
+      - ssl_create_result is changed
+
+- name: SSL | Query cluster info with ca_cert
+  ansible.mysql.mysql_innodb_cluster_info:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_primary_host }}"
+    login_port: "{{ mysql_primary_port }}"
+    ca_cert: /tmp/innodb_cluster_cert.pem
+  register: ssl_info_result
+
+- name: SSL | Assert cluster info returned successfully with SSL
+  ansible.builtin.assert:
+    that:
+      - ssl_info_result is not changed
+      - ssl_info_result.cluster_name == cluster_name
+
+- name: SSL | Dissolve SSL test cluster
+  ansible.mysql.mysql_innodb_cluster:
+    login_user: "{{ mysql_user }}"
+    login_password: "{{ mysql_password }}"
+    login_host: "{{ mysql_primary_host }}"
+    login_port: "{{ mysql_primary_port }}"
+    ca_cert: /tmp/innodb_cluster_cert.pem
+    mode: dissolve
+    force: true
+
+- name: SSL | Clean up certificate
+  ansible.builtin.file:
+    path: /tmp/innodb_cluster_cert.pem
+    state: absent

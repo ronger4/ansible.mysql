@@ -237,20 +237,30 @@ from ansible_collections.ansible.mysql.plugins.module_utils.mysqlsh import (
 )
 
 
-def cluster_exists(module, mysqlsh_path, uri, password):
+def _ssl_kwargs(params):
+    """Extract SSL keyword arguments from module params for run_mysqlsh calls."""
+    return {
+        'ssl_ca': params.get('ca_cert'),
+        'ssl_cert': params.get('client_cert'),
+        'ssl_key': params.get('client_key'),
+    }
+
+
+def cluster_exists(module, mysqlsh_path, uri, password, params):
     """Check if an InnoDB Cluster exists on the connected instance."""
     try:
-        run_mysqlsh(module, mysqlsh_path, uri, password, 'cluster', 'status')
+        run_mysqlsh(module, mysqlsh_path, uri, password, 'cluster', 'status',
+                    **_ssl_kwargs(params))
         return True
     except MysqlShellError:
         return False
 
 
-def get_cluster_status(module, mysqlsh_path, uri, password):
+def get_cluster_status(module, mysqlsh_path, uri, password, params):
     """Get current cluster status. Returns None if cluster doesn't exist."""
     try:
         return run_mysqlsh(module, mysqlsh_path, uri, password,
-                           'cluster', 'status')
+                           'cluster', 'status', **_ssl_kwargs(params))
     except MysqlShellError:
         return None
 
@@ -307,7 +317,7 @@ def mode_create(module, mysqlsh_path, uri, password, params):
     if not name:
         module.fail_json(msg="Parameter 'name' is required for mode=create")
 
-    if cluster_exists(module, mysqlsh_path, uri, password):
+    if cluster_exists(module, mysqlsh_path, uri, password, params):
         module.exit_json(changed=False,
                          msg="Cluster already exists")
 
@@ -323,7 +333,8 @@ def mode_create(module, mysqlsh_path, uri, password, params):
 
     try:
         result = run_mysqlsh(module, mysqlsh_path, uri, password,
-                             'dba', 'create-cluster', args)
+                             'dba', 'create-cluster', args,
+                             **_ssl_kwargs(params))
     except MysqlShellError as e:
         module.fail_json(msg=f"Failed to create cluster '{name}': {e}")
 
@@ -336,7 +347,7 @@ def mode_dissolve(module, mysqlsh_path, uri, password, params):
     """Handle mode=dissolve."""
     force = params['force']
 
-    if not cluster_exists(module, mysqlsh_path, uri, password):
+    if not cluster_exists(module, mysqlsh_path, uri, password, params):
         module.exit_json(changed=False,
                          msg="No cluster exists to dissolve")
 
@@ -350,7 +361,8 @@ def mode_dissolve(module, mysqlsh_path, uri, password, params):
 
     try:
         run_mysqlsh(module, mysqlsh_path, uri, password,
-                    'cluster', 'dissolve', args or None)
+                    'cluster', 'dissolve', args or None,
+                    **_ssl_kwargs(params))
     except MysqlShellError as e:
         module.fail_json(msg=f"Failed to dissolve cluster: {e}")
 
@@ -365,7 +377,7 @@ def mode_add_instance(module, mysqlsh_path, uri, password, params):
     if not instance:
         module.fail_json(msg="Parameter 'instance' is required for mode=add_instance")
 
-    status_data = get_cluster_status(module, mysqlsh_path, uri, password)
+    status_data = get_cluster_status(module, mysqlsh_path, uri, password, params)
     member_state = instance_in_cluster(status_data, instance)
 
     if member_state and member_state.upper() == 'ONLINE':
@@ -382,7 +394,8 @@ def mode_add_instance(module, mysqlsh_path, uri, password, params):
 
     try:
         result = run_mysqlsh(module, mysqlsh_path, uri, password,
-                             'cluster', 'add-instance', args)
+                             'cluster', 'add-instance', args,
+                             **_ssl_kwargs(params))
     except MysqlShellError as e:
         # Support idempotency for add_instance
         if 'already part of' in str(e).lower():
@@ -413,7 +426,8 @@ def mode_remove_instance(module, mysqlsh_path, uri, password, params):
 
     try:
         run_mysqlsh(module, mysqlsh_path, uri, password,
-                    'cluster', 'remove-instance', args)
+                    'cluster', 'remove-instance', args,
+                    **_ssl_kwargs(params))
     except MysqlShellError as e:
         if 'does not belong' in str(e).lower() or 'is not a member' in str(e).lower():
             module.exit_json(changed=False,
@@ -431,7 +445,7 @@ def mode_rejoin_instance(module, mysqlsh_path, uri, password, params):
     if not instance:
         module.fail_json(msg="Parameter 'instance' is required for mode=rejoin_instance")
 
-    status_data = get_cluster_status(module, mysqlsh_path, uri, password)
+    status_data = get_cluster_status(module, mysqlsh_path, uri, password, params)
     member_state = instance_in_cluster(status_data, instance)
 
     if member_state and member_state.upper() == 'ONLINE':
@@ -444,7 +458,8 @@ def mode_rejoin_instance(module, mysqlsh_path, uri, password, params):
 
     try:
         run_mysqlsh(module, mysqlsh_path, uri, password,
-                    'cluster', 'rejoin-instance', [instance])
+                    'cluster', 'rejoin-instance', [instance],
+                    **_ssl_kwargs(params))
     except MysqlShellError as e:
         module.fail_json(msg=f"Failed to rejoin instance '{instance}': {e}")
 
@@ -459,7 +474,7 @@ def mode_set_primary(module, mysqlsh_path, uri, password, params):
     if not instance:
         module.fail_json(msg="Parameter 'instance' is required for mode=set_primary")
 
-    status_data = get_cluster_status(module, mysqlsh_path, uri, password)
+    status_data = get_cluster_status(module, mysqlsh_path, uri, password, params)
     primary_before = get_current_primary(status_data)
 
     if module.check_mode:
@@ -468,14 +483,15 @@ def mode_set_primary(module, mysqlsh_path, uri, password, params):
 
     try:
         run_mysqlsh(module, mysqlsh_path, uri, password,
-                    'cluster', 'set-primary-instance', [instance])
+                    'cluster', 'set-primary-instance', [instance],
+                    **_ssl_kwargs(params))
     except MysqlShellError as e:
         if 'already the primary' in str(e).lower():
             module.exit_json(changed=False,
                              msg=f"Instance '{instance}' is already the primary")
         module.fail_json(msg=f"Failed to set primary to '{instance}': {e}")
 
-    status_after = get_cluster_status(module, mysqlsh_path, uri, password)
+    status_after = get_cluster_status(module, mysqlsh_path, uri, password, params)
     primary_after = get_current_primary(status_after)
 
     if primary_before == primary_after:
@@ -501,7 +517,8 @@ def mode_set_option(module, mysqlsh_path, uri, password, params):
 
     try:
         run_mysqlsh(module, mysqlsh_path, uri, password,
-                    'cluster', 'set-option', [option_name, option_value])
+                    'cluster', 'set-option', [option_name, option_value],
+                    **_ssl_kwargs(params))
     except MysqlShellError as e:
         module.fail_json(msg=f"Failed to set option '{option_name}': {e}")
 
@@ -516,7 +533,8 @@ def mode_rescan(module, mysqlsh_path, uri, password, params):
 
     try:
         result = run_mysqlsh(module, mysqlsh_path, uri, password,
-                             'cluster', 'rescan')
+                             'cluster', 'rescan',
+                             **_ssl_kwargs(params))
     except MysqlShellError as e:
         module.fail_json(msg=f"Failed to rescan cluster: {e}")
 
@@ -526,7 +544,7 @@ def mode_rescan(module, mysqlsh_path, uri, password, params):
 
 def mode_switch_to_multi_primary(module, mysqlsh_path, uri, password, params):
     """Handle mode=switch_to_multi_primary."""
-    status_data = get_cluster_status(module, mysqlsh_path, uri, password)
+    status_data = get_cluster_status(module, mysqlsh_path, uri, password, params)
     current_mode = get_topology_mode(status_data)
 
     if current_mode and 'multi' in current_mode.lower():
@@ -539,7 +557,8 @@ def mode_switch_to_multi_primary(module, mysqlsh_path, uri, password, params):
 
     try:
         run_mysqlsh_script(module, mysqlsh_path, uri, password,
-                           "dba.get_cluster().switch_to_multi_primary_mode()")
+                           "dba.get_cluster().switch_to_multi_primary_mode()",
+                           **_ssl_kwargs(params))
     except MysqlShellError as e:
         module.fail_json(msg=f"Failed to switch to multi-primary: {e}")
 
@@ -549,7 +568,7 @@ def mode_switch_to_multi_primary(module, mysqlsh_path, uri, password, params):
 
 def mode_switch_to_single_primary(module, mysqlsh_path, uri, password, params):
     """Handle mode=switch_to_single_primary."""
-    status_data = get_cluster_status(module, mysqlsh_path, uri, password)
+    status_data = get_cluster_status(module, mysqlsh_path, uri, password, params)
     current_mode = get_topology_mode(status_data)
 
     if current_mode and 'single' in current_mode.lower():
@@ -562,7 +581,8 @@ def mode_switch_to_single_primary(module, mysqlsh_path, uri, password, params):
 
     try:
         run_mysqlsh_script(module, mysqlsh_path, uri, password,
-                           "dba.get_cluster().switch_to_single_primary_mode()")
+                           "dba.get_cluster().switch_to_single_primary_mode()",
+                           **_ssl_kwargs(params))
     except MysqlShellError as e:
         module.fail_json(msg=f"Failed to switch to single-primary: {e}")
 

@@ -56,18 +56,31 @@ def build_uri(user, host, port, socket=None):
     return f"{user}@{host}:{port}"
 
 
-def _build_base_cmd(mysqlsh_path, uri, password):
-    """Build the common mysqlsh command prefix (connection, JSON, no-wizard)."""
+def _build_base_cmd(mysqlsh_path, uri, password,
+                    ssl_ca=None, ssl_cert=None, ssl_key=None):
+    """Build the common mysqlsh command prefix (connection, JSON, no-wizard, SSL)."""
     cmd = [mysqlsh_path, uri, '--json=raw', '--no-wizard']
     if password:
         cmd.append(f'--password={password}')
     else:
         cmd.append('--no-password')
+
+    if ssl_ca:
+        cmd.append(f'--ssl-ca={ssl_ca}')
+    if ssl_cert:
+        cmd.append(f'--ssl-cert={ssl_cert}')
+    if ssl_key:
+        cmd.append(f'--ssl-key={ssl_key}')
+    if ssl_ca:
+        cmd.append('--ssl-mode=VERIFY_CA')
+    elif ssl_cert or ssl_key:
+        cmd.append('--ssl-mode=REQUIRED')
+
     return cmd
 
 
 def run_mysqlsh(module, mysqlsh_path, uri, password, shell_object, method,
-                args=None):
+                args=None, ssl_ca=None, ssl_cert=None, ssl_key=None):
     """Execute a single AdminAPI call via mysqlsh -- CLI integration.
 
     Uses the mysqlsh command-line integration syntax:
@@ -81,6 +94,9 @@ def run_mysqlsh(module, mysqlsh_path, uri, password, shell_object, method,
         shell_object: AdminAPI object (e.g., 'dba', 'cluster').
         method: Method to call in kebab-case (e.g., 'create-cluster', 'status').
         args: Optional list of positional/named arguments for the method.
+        ssl_ca: Path to CA certificate for SSL connections.
+        ssl_cert: Path to client certificate for SSL connections.
+        ssl_key: Path to client private key for SSL connections.
 
     Returns:
         dict or None: Parsed JSON output from mysqlsh, or None if no output.
@@ -89,7 +105,8 @@ def run_mysqlsh(module, mysqlsh_path, uri, password, shell_object, method,
         MysqlShellError: If the command returns a non-zero exit code or
                          produces unparseable output.
     """
-    cmd = _build_base_cmd(mysqlsh_path, uri, password)
+    cmd = _build_base_cmd(mysqlsh_path, uri, password,
+                          ssl_ca=ssl_ca, ssl_cert=ssl_cert, ssl_key=ssl_key)
     cmd.extend(['--', shell_object, method])
     if args:
         cmd.extend(args)
@@ -98,7 +115,8 @@ def run_mysqlsh(module, mysqlsh_path, uri, password, shell_object, method,
     return parse_json_output(stdout, stderr, rc)
 
 
-def run_mysqlsh_script(module, mysqlsh_path, uri, password, script):
+def run_mysqlsh_script(module, mysqlsh_path, uri, password, script,
+                       ssl_ca=None, ssl_cert=None, ssl_key=None):
     """Execute a Python script via mysqlsh --py -e for operations not in CLI mode.
 
     Used for cluster methods not available via -- CLI integration
@@ -110,6 +128,9 @@ def run_mysqlsh_script(module, mysqlsh_path, uri, password, script):
         uri: Connection URI (user@host:port).
         password: MySQL password.
         script: Python script string to execute.
+        ssl_ca: Path to CA certificate for SSL connections.
+        ssl_cert: Path to client certificate for SSL connections.
+        ssl_key: Path to client private key for SSL connections.
 
     Returns:
         dict or None: Parsed JSON output.
@@ -117,7 +138,8 @@ def run_mysqlsh_script(module, mysqlsh_path, uri, password, script):
     Raises:
         MysqlShellError: On failure.
     """
-    cmd = _build_base_cmd(mysqlsh_path, uri, password)
+    cmd = _build_base_cmd(mysqlsh_path, uri, password,
+                          ssl_ca=ssl_ca, ssl_cert=ssl_cert, ssl_key=ssl_key)
     cmd.extend(['--py', '-e', script])
 
     rc, stdout, stderr = module.run_command(cmd, cwd='/tmp')

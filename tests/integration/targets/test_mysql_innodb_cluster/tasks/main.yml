@@ -139,3 +139,6 @@
 
     - name: Include cluster lifecycle tests
       ansible.builtin.include_tasks: test_cluster_lifecycle.yml
+
+    - name: Include SSL tests
+      ansible.builtin.include_tasks: test_ssl.yml

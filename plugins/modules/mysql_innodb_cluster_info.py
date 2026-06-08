@@ -19,11 +19,6 @@ description:
 version_added: '5.1.0'
 
 options:
-  name:
-    description:
-      - Name of the InnoDB Cluster to query.
-      - If omitted, the default cluster on the connected instance is used.
-    type: str
   filter:
     description:
       - Limit the collected information by specifying a list of sections.
@@ -177,7 +172,8 @@ from ansible_collections.ansible.mysql.plugins.module_utils.mysqlsh import (
 )
 
 
-def get_cluster_status(module, mysqlsh_path, uri, password, name, extended):
+def get_cluster_status(module, mysqlsh_path, uri, password, extended,
+                       ssl_ca=None, ssl_cert=None, ssl_key=None):
     """Retrieve cluster status via mysqlsh -- cluster status."""
     args = []
     if extended > 0:
@@ -185,18 +181,21 @@ def get_cluster_status(module, mysqlsh_path, uri, password, name, extended):
 
     try:
         result = run_mysqlsh(module, mysqlsh_path, uri, password,
-                             'cluster', 'status', args or None)
+                             'cluster', 'status', args or None,
+                             ssl_ca=ssl_ca, ssl_cert=ssl_cert, ssl_key=ssl_key)
     except MysqlShellError as e:
         module.fail_json(msg=f"Failed to get cluster status: {e}")
 
     return result
 
 
-def get_cluster_options(module, mysqlsh_path, uri, password):
+def get_cluster_options(module, mysqlsh_path, uri, password,
+                        ssl_ca=None, ssl_cert=None, ssl_key=None):
     """Retrieve cluster options via mysqlsh -- cluster options."""
     try:
         result = run_mysqlsh(module, mysqlsh_path, uri, password,
-                             'cluster', 'options')
+                             'cluster', 'options',
+                             ssl_ca=ssl_ca, ssl_cert=ssl_cert, ssl_key=ssl_key)
     except MysqlShellError as e:
         module.fail_json(msg=f"Failed to get cluster options: {e}")
 
@@ -259,7 +258,6 @@ def main():
         ca_cert=dict(type='path', aliases=['ssl_ca']),
         client_cert=dict(type='path', aliases=['ssl_cert']),
         client_key=dict(type='path', aliases=['ssl_key']),
-        name=dict(type='str'),
         filter=dict(type='list', elements='str'),
         extended=dict(type='int', default=0, choices=[0, 1, 2, 3]),
     )
@@ -275,15 +273,20 @@ def main():
     login_port = module.params['login_port']
     login_unix_socket = module.params['login_unix_socket']
     mysqlsh_path_param = module.params['mysqlsh_path']
-    name = module.params['name']
     filter_ = module.params['filter']
     extended = module.params['extended']
 
     mysqlsh_path = find_mysqlsh(module, mysqlsh_path_param)
     uri = build_uri(login_user, login_host, login_port, login_unix_socket)
 
+    ssl_ca = module.params['ca_cert']
+    ssl_cert = module.params['client_cert']
+    ssl_key = module.params['client_key']
+
     status_data = get_cluster_status(module, mysqlsh_path, uri, login_password,
-                                     name, extended)
+                                     extended,
+                                     ssl_ca=ssl_ca, ssl_cert=ssl_cert,
+                                     ssl_key=ssl_key)
 
     if status_data is None:
         module.fail_json(msg="No status data returned from cluster")
@@ -313,7 +316,10 @@ def main():
         result['routers'] = extract_routers(status_data)
 
     if should_include_all or 'options' in filter_:
-        options_data = get_cluster_options(module, mysqlsh_path, uri, login_password)
+        options_data = get_cluster_options(module, mysqlsh_path, uri,
+                                          login_password,
+                                          ssl_ca=ssl_ca, ssl_cert=ssl_cert,
+                                          ssl_key=ssl_key)
         result['cluster_options'] = options_data
 
     module.exit_json(**result)

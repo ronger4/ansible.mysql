@@ -54,13 +54,15 @@ class TestClusterExists:
     def test_cluster_exists_true(self, mock_run):
         mock_run.return_value = {'clusterName': 'test'}
         module = MagicMock()
-        assert cluster_exists(module, '/usr/bin/mysqlsh', 'root@localhost:3306', 'pass') is True
+        params = {'ca_cert': None, 'client_cert': None, 'client_key': None}
+        assert cluster_exists(module, '/usr/bin/mysqlsh', 'root@localhost:3306', 'pass', params) is True
 
     @patch('ansible_collections.ansible.mysql.plugins.modules.mysql_innodb_cluster.run_mysqlsh')
     def test_cluster_exists_false(self, mock_run):
         mock_run.side_effect = MysqlShellError('no cluster')
         module = MagicMock()
-        assert cluster_exists(module, '/usr/bin/mysqlsh', 'root@localhost:3306', 'pass') is False
+        params = {'ca_cert': None, 'client_cert': None, 'client_key': None}
+        assert cluster_exists(module, '/usr/bin/mysqlsh', 'root@localhost:3306', 'pass', params) is False
 
 
 class TestInstanceInCluster:
