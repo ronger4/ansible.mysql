@@ -10,18 +10,18 @@
     msg: "Skipping InnoDB Cluster tests - only supported on MySQL"
 
 - name: Check if running via dedicated innodb-cluster target
+  vars:
+    _integration_path: /root/ansible_collections/ansible/mysql/tests/integration
   ansible.builtin.set_fact:
-    innodb_cluster_primary_ip: >-
+    _innodb_cluster_enabled: >-
       {{
-        lookup(
-          'file',
-          '/root/ansible_collections/ansible/mysql/tests/integration/primary_ip',
-          errors='ignore'
-        ) | default('', true) | trim
+        lookup('ansible.builtin.first_found',
+          dict(files=[_integration_path ~ '/primary_ip'], skip=true)
+        ) | length > 0
       }}
 
 - name: Skip if not running via dedicated target
-  when: innodb_cluster_primary_ip | length == 0
+  when: not (_innodb_cluster_enabled | bool)
   ansible.builtin.debug:
     msg: >-
       Skipping InnoDB Cluster tests - not running via dedicated target.
@@ -30,13 +30,15 @@
 - name: Run InnoDB Cluster tests
   when:
     - db_engine is not defined or db_engine == 'mysql'
-    - innodb_cluster_primary_ip | length > 0
+    - _innodb_cluster_enabled | bool
+  vars:
+    _integration_path: /root/ansible_collections/ansible/mysql/tests/integration
   block:
     - name: Read container IPs from dedicated target files
       ansible.builtin.set_fact:
-        mysql_primary_host: "{{ lookup('file', '/root/ansible_collections/ansible/mysql/tests/integration/primary_ip') | trim }}"
-        mysql_replica1_host: "{{ lookup('file', '/root/ansible_collections/ansible/mysql/tests/integration/replica1_ip') | trim }}"
-        mysql_replica2_host: "{{ lookup('file', '/root/ansible_collections/ansible/mysql/tests/integration/replica2_ip') | trim }}"
+        mysql_primary_host: "{{ lookup('file', _integration_path ~ '/primary_ip') | trim }}"
+        mysql_replica1_host: "{{ lookup('file', _integration_path ~ '/replica1_ip') | trim }}"
+        mysql_replica2_host: "{{ lookup('file', _integration_path ~ '/replica2_ip') | trim }}"
 
     - name: Check if mysqlsh is already installed
       ansible.builtin.command: mysqlsh --version
