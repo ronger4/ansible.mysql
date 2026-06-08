@@ -40,25 +40,22 @@
         mysql_replica1_host: "{{ lookup('file', _integration_path ~ '/replica1_ip') | trim }}"
         mysql_replica2_host: "{{ lookup('file', _integration_path ~ '/replica2_ip') | trim }}"
 
+    - name: Derive version-specific settings for MySQL Shell
+      vars:
+        _major_minor: "{{ db_version.split('.')[:2] | join('.') }}"
+        _lts_suffix: "{{ db_version is version('8.4', '>=') | ternary('-lts', '') }}"
+      ansible.builtin.set_fact:
+        _mysqlsh_major_minor: "{{ _major_minor }}"
+        _mysqlsh_repo_component: "mysql-{{ _major_minor }}{{ _lts_suffix }}"
+
     - name: Check if mysqlsh is already installed
       ansible.builtin.command: mysqlsh --version
       changed_when: false
       failed_when: false
       register: mysqlsh_check
 
-    - name: Decide whether mysqlsh installation or upgrade is needed
-      ansible.builtin.set_fact:
-        mysqlsh_needs_install: >-
-          {{
-            mysqlsh_check.rc != 0 or
-            (
-              db_version is version('8.4', '>=')
-              and not (mysqlsh_check.stdout is search('Ver (8\\.4|9\\.)'))
-            )
-          }}
-
-    - name: Install mysql-shell if not present
-      when: mysqlsh_needs_install
+    - name: Install or upgrade mysql-shell to match server version
+      when: mysqlsh_check.rc != 0 or not (mysqlsh_check.stdout is search('Ver ' ~ _mysqlsh_major_minor))
       block:
         - name: Add MySQL GPG key
           ansible.builtin.copy:
@@ -78,9 +75,12 @@
             name: mysql
             types: deb
             uris: http://repo.mysql.com/apt/ubuntu
-            suites: jammy
+            suites: >-
+              {{ ansible_distribution_release
+                 if ansible_distribution_version is version('26.04', '<')
+                 else 'noble' }}
             components:
-              - "{{ db_version is version('8.4', '>=') | ternary('mysql-8.4-lts', 'mysql-8.0') }}"
+              - "{{ _mysqlsh_repo_component }}"
             signed_by: /etc/apt/trusted.gpg.d/mysql.asc
             state: present
 
