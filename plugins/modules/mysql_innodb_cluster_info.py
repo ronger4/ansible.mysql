@@ -316,10 +316,9 @@ def main():
         result['routers'] = extract_routers(status_data)
 
     if should_include_all or 'options' in filter_:
-        options_data = get_cluster_options(module, mysqlsh_path, uri,
-                                          login_password,
-                                          ssl_ca=ssl_ca, ssl_cert=ssl_cert,
-                                          ssl_key=ssl_key)
+        options_data = get_cluster_options(
+            module, mysqlsh_path, uri, login_password,
+            ssl_ca=ssl_ca, ssl_cert=ssl_cert, ssl_key=ssl_key)
         result['cluster_options'] = options_data
 
     module.exit_json(**result)
