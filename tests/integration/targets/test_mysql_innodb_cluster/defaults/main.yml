@@ -1,11 +1,8 @@
 ---
 mysql_user: root
 mysql_password: msandbox
-mysql_primary_host: "{{ lookup('file', '/root/ansible_collections/ansible/mysql/tests/integration/primary_ip') | trim }}"
 mysql_primary_port: 3306
-mysql_replica1_host: "{{ lookup('file', '/root/ansible_collections/ansible/mysql/tests/integration/replica1_ip') | trim }}"
 mysql_replica1_port: 3306
-mysql_replica2_host: "{{ lookup('file', '/root/ansible_collections/ansible/mysql/tests/integration/replica2_ip') | trim }}"
 mysql_replica2_port: 3306
 
 cluster_name: testCluster

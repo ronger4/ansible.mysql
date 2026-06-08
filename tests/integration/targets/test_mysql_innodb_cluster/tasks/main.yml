@@ -17,7 +17,7 @@
           'file',
           '/root/ansible_collections/ansible/mysql/tests/integration/primary_ip',
           errors='ignore'
-        ) | trim
+        ) | default('', true) | trim
       }}
 
 - name: Skip if not running via dedicated target
@@ -32,6 +32,12 @@
     - db_engine is not defined or db_engine == 'mysql'
     - innodb_cluster_primary_ip | length > 0
   block:
+    - name: Read container IPs from dedicated target files
+      ansible.builtin.set_fact:
+        mysql_primary_host: "{{ lookup('file', '/root/ansible_collections/ansible/mysql/tests/integration/primary_ip') | trim }}"
+        mysql_replica1_host: "{{ lookup('file', '/root/ansible_collections/ansible/mysql/tests/integration/replica1_ip') | trim }}"
+        mysql_replica2_host: "{{ lookup('file', '/root/ansible_collections/ansible/mysql/tests/integration/replica2_ip') | trim }}"
+
     - name: Check if mysqlsh is already installed
       ansible.builtin.command: mysqlsh --version
       changed_when: false
