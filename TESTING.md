@@ -89,6 +89,7 @@ The Makefile accept the following options
 - `target`
   - Mandatory: false
   - Choices:
+    - "test_mysql_binlog_info"
     - "test_mysql_db"
     - "test_mysql_info"
     - "test_mysql_query"
