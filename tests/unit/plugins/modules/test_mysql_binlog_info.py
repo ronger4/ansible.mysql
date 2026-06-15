@@ -79,8 +79,8 @@ def test_get_info_settings_returns_only_binlog_related_variables():
 
     result = info.get_info(['settings'])
 
-    assert cursor.execute.call_args_list[0].args == ("SHOW GLOBAL VARIABLES LIKE 'log_bin'",)
-    assert cursor.execute.call_args_list[1].args == ('SHOW GLOBAL VARIABLES',)
+    assert cursor.execute.call_args_list[0][0] == ("SHOW GLOBAL VARIABLES LIKE 'log_bin'",)
+    assert cursor.execute.call_args_list[1][0] == ('SHOW GLOBAL VARIABLES',)
     assert result == {
         'settings': {
             'log_bin': 'ON',
