@@ -96,4 +96,3 @@
           - filtered_result.totals is defined
           - filtered_result.current is not defined
           - filtered_result.settings is not defined
-
