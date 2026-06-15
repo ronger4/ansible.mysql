@@ -3,6 +3,8 @@
 from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
+import pytest
+
 try:
     from unittest.mock import MagicMock
 except ImportError:
@@ -13,6 +15,9 @@ from ansible_collections.ansible.mysql.plugins.modules.mysql_binlog_info import 
 
 def test_get_info_returns_requested_subsets_with_normalized_totals():
     query_results = {
+        "SHOW GLOBAL VARIABLES LIKE 'log_bin'": [
+            {'Variable_name': 'log_bin', 'Value': 'ON'}
+        ],
         'SHOW BINARY LOG STATUS': [
             {'File': 'binlog.000003', 'Position': '456', 'Executed_Gtid_Set': 'uuid:1-9'}
         ],
@@ -52,19 +57,30 @@ def test_get_info_returns_requested_subsets_with_normalized_totals():
 
 def test_get_info_settings_returns_only_binlog_related_variables():
     cursor = MagicMock()
-    cursor.fetchall.return_value = [
-        {'Variable_name': 'log_bin', 'Value': 'ON'},
-        {'Variable_name': 'binlog_format', 'Value': 'ROW'},
-        {'Variable_name': 'max_binlog_size', 'Value': '1048576'},
-        {'Variable_name': 'sync_binlog', 'Value': '1'},
-        {'Variable_name': 'version', 'Value': '8.4.9'},
-    ]
+    query_results = {
+        "SHOW GLOBAL VARIABLES LIKE 'log_bin'": [
+            {'Variable_name': 'log_bin', 'Value': 'ON'},
+        ],
+        'SHOW GLOBAL VARIABLES': [
+            {'Variable_name': 'log_bin', 'Value': 'ON'},
+            {'Variable_name': 'binlog_format', 'Value': 'ROW'},
+            {'Variable_name': 'max_binlog_size', 'Value': '1048576'},
+            {'Variable_name': 'sync_binlog', 'Value': '1'},
+            {'Variable_name': 'version', 'Value': '8.4.9'},
+        ],
+    }
+
+    def execute_side_effect(query):
+        cursor.fetchall.return_value = query_results[query]
+
+    cursor.execute.side_effect = execute_side_effect
 
     info = MySQL_Binlog_Info(MagicMock(), cursor, 'mysql', '8.4.9')
 
     result = info.get_info(['settings'])
 
-    cursor.execute.assert_called_once_with('SHOW GLOBAL VARIABLES')
+    assert cursor.execute.call_args_list[0].args == ("SHOW GLOBAL VARIABLES LIKE 'log_bin'",)
+    assert cursor.execute.call_args_list[1].args == ('SHOW GLOBAL VARIABLES',)
     assert result == {
         'settings': {
             'log_bin': 'ON',
@@ -77,6 +93,9 @@ def test_get_info_settings_returns_only_binlog_related_variables():
 
 def test_get_info_uses_mariadb_gtid_fallback_when_missing_from_status():
     query_results = {
+        "SHOW GLOBAL VARIABLES LIKE 'log_bin'": [
+            {'Variable_name': 'log_bin', 'Value': 'ON'}
+        ],
         'SHOW BINLOG STATUS': [
             {'File': 'mariadb-bin.000001', 'Position': '789'}
         ],
@@ -107,6 +126,9 @@ def test_get_info_uses_mariadb_gtid_fallback_when_missing_from_status():
 
 def test_get_info_exclusion_filter_omits_requested_subset():
     query_results = {
+        "SHOW GLOBAL VARIABLES LIKE 'log_bin'": [
+            {'Variable_name': 'log_bin', 'Value': 'ON'}
+        ],
         'SHOW BINARY LOG STATUS': [
             {'File': 'binlog.000003', 'Position': '456', 'Executed_Gtid_Set': 'uuid:1-9'}
         ],
@@ -140,3 +162,22 @@ def test_get_info_exclusion_filter_omits_requested_subset():
             'size': 123,
         },
     }
+
+
+def test_get_info_fails_when_binary_logging_is_disabled():
+    cursor = MagicMock()
+    cursor.fetchall.return_value = [
+        {'Variable_name': 'log_bin', 'Value': 'OFF'},
+    ]
+
+    module = MagicMock()
+    module.fail_json.side_effect = RuntimeError
+
+    info = MySQL_Binlog_Info(module, cursor, 'mysql', '8.4.9')
+
+    with pytest.raises(RuntimeError):
+        info.get_info(['settings'])
+
+    module.fail_json.assert_called_once_with(
+        msg='Binary logging is disabled (log_bin=OFF), mysql_binlog_info cannot be used.'
+    )

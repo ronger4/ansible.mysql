@@ -2,7 +2,7 @@
 
 # Test code for mysql_binlog_info module #
 
-- name: mysql_binlog_info | Run integration checks
+- name: MySQL binlog info | Run integration checks
   vars:
     mysql_parameters: &mysql_params
       login_user: "{{ mysql_user }}"
@@ -96,3 +96,4 @@
           - filtered_result.totals is defined
           - filtered_result.current is not defined
           - filtered_result.settings is not defined
+

@@ -38,6 +38,7 @@ options:
 notes:
   - Compatible with MariaDB or MySQL.
   - The module does not modify server state.
+  - The module requires binary logging to be enabled and fails when C(log_bin=OFF).
   - Some mutable binlog settings are dynamic and can be managed with M(ansible.mysql.mysql_variables).
   - Startup-only or restart-managed settings remain outside this module's scope.
 
@@ -163,6 +164,7 @@ class MySQL_Binlog_Info(object):
 
     def get_info(self, filter_):
         wanted = set(self.__get_wanted(filter_))
+        self.__ensure_binary_logging_enabled()
         self.__collect(wanted)
         return dict((key, self.info[key]) for key in self.info if key in wanted)
 
@@ -203,6 +205,17 @@ class MySQL_Binlog_Info(object):
 
         if 'settings' in wanted:
             self.__get_settings()
+
+    def __ensure_binary_logging_enabled(self):
+        res = self.__exec_sql("SHOW GLOBAL VARIABLES LIKE 'log_bin'")
+        if not res:
+            return
+
+        log_bin = res[0].get('Value')
+        if str(log_bin).upper() in ('OFF', '0'):
+            self.module.fail_json(
+                msg='Binary logging is disabled (log_bin=OFF), mysql_binlog_info cannot be used.'
+            )
 
     def __get_current_status(self):
         query = self.command_resolver.resolve_command("SHOW MASTER STATUS")
