@@ -28,13 +28,12 @@ options:
   filter:
     description:
       - Limit the collected information by comma separated string or YAML list.
-      - Allowable values are C(current), C(logs), C(totals), and C(settings).
+      - Allowable values are V(current), V(logs), V(totals), and V(settings).
       - By default, collects all subsets.
-      - You can use C(!) before a value, for example C(!settings), to exclude it from the information.
+      - You can use C(!) before a value, for example V(!settings), to exclude it from the information.
       - If you pass including and excluding values together, the excluding values are ignored.
     type: list
     elements: str
-    version_added: '5.1.0'
 
 notes:
   - Compatible with MariaDB or MySQL.
