@@ -41,6 +41,7 @@ options:
   donor_password:
     description:
     - Password used by the recipient to connect to the donor for clone.
+    - The password is sent to MySQL as part of the C(CLONE INSTANCE FROM ...) statement.
     type: str
     required: true
   require_ssl:
@@ -192,6 +193,19 @@ def get_redacted_query(query, params):
 
 def is_terminal_state(state):
     return state in TERMINAL_STATES
+
+
+def should_wait_after_execute_error(error_message):
+    if error_message is None:
+        return False
+
+    if 'Restart server failed' in error_message:
+        return True
+
+    if error_message.startswith('(3707,'):
+        return True
+
+    return False
 
 
 def _close_connection(cursor, connection):
@@ -361,6 +375,11 @@ def main():
             cursor.execute(query, params)
         except Exception as exc:
             execute_error = to_native(exc)
+            if not should_wait_after_execute_error(execute_error):
+                module.fail_json(
+                    msg='Clone failed to start. %s' % execute_error,
+                    query=redacted_query,
+                )
     finally:
         _close_connection(cursor, connection)
 

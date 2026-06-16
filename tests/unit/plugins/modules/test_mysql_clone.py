@@ -12,6 +12,7 @@ from ansible_collections.ansible.mysql.plugins.modules.mysql_clone import (
     get_redacted_query,
     is_terminal_state,
     main,
+    should_wait_after_execute_error,
     validate_donor_allowed,
     validate_clone_support,
     wait_for_clone_completion,
@@ -41,8 +42,8 @@ class DummyCursor(object):
         self.fetchall_results = list(fetchall_results or [])
         self.executed = []
 
-    def execute(self, query):
-        self.executed.append(query)
+    def execute(self, query, params=None):
+        self.executed.append((query, params))
 
     def fetchone(self):
         if self.fetchone_results:
@@ -61,6 +62,17 @@ class DummyCursor(object):
 class DummyConnection(object):
     def close(self):
         return None
+
+
+class FailingCloneCursor(DummyCursor):
+    def __init__(self, error_message):
+        super(FailingCloneCursor, self).__init__()
+        self.error_message = error_message
+
+    def execute(self, query, params=None):
+        self.executed.append((query, params))
+        if query.startswith('CLONE INSTANCE FROM'):
+            raise RuntimeError(self.error_message)
 
 
 @pytest.mark.parametrize(
@@ -124,6 +136,19 @@ def test_get_redacted_query_masks_password():
 )
 def test_is_terminal_state(state, output):
     assert is_terminal_state(state) is output
+
+
+@pytest.mark.parametrize(
+    'error_message,output',
+    [
+        ("(3707, 'Restart server failed (mysqld is not managed by supervisor process).')", True),
+        ("(1045, 'Access denied for user')", False),
+        ('syntax error near CLONE', False),
+        (None, False),
+    ]
+)
+def test_should_wait_after_execute_error(error_message, output):
+    assert should_wait_after_execute_error(error_message) is output
 
 
 def test_ensure_clone_plugin_active_fails_when_plugin_missing():
@@ -270,3 +295,135 @@ def test_main_returns_predictive_result_in_check_mode(monkeypatch):
     assert result['query'] == (
         "CLONE INSTANCE FROM 'clone_user'@'192.0.2.10':3307 IDENTIFIED BY '********' REQUIRE SSL"
     )
+
+
+def test_main_fails_immediately_for_fatal_execute_error(monkeypatch):
+    module = DummyModule()
+    module.params.update({
+        'login_user': 'root',
+        'login_password': 'secret',
+        'config_file': '~/.my.cnf',
+        'client_cert': None,
+        'client_key': None,
+        'ca_cert': None,
+        'check_hostname': None,
+        'connect_timeout': 30,
+        'wait_timeout': 30,
+        'poll_interval': 5,
+        'donor_host': '192.0.2.10',
+        'donor_port': 3307,
+        'donor_user': 'clone_user',
+        'donor_password': 'supersecret',
+        'require_ssl': None,
+    })
+    cursor = FailingCloneCursor("(1045, 'Access denied for user')")
+    connection = DummyConnection()
+
+    monkeypatch.setattr(
+        'ansible_collections.ansible.mysql.plugins.modules.mysql_clone.AnsibleModule',
+        lambda **kwargs: module,
+    )
+    monkeypatch.setattr(
+        'ansible_collections.ansible.mysql.plugins.modules.mysql_clone.mysql_driver',
+        object(),
+    )
+    monkeypatch.setattr(
+        'ansible_collections.ansible.mysql.plugins.modules.mysql_clone._connect',
+        lambda _module: (cursor, connection),
+    )
+    monkeypatch.setattr(
+        'ansible_collections.ansible.mysql.plugins.modules.mysql_clone.get_server_implementation',
+        lambda _cursor: 'mysql',
+    )
+    monkeypatch.setattr(
+        'ansible_collections.ansible.mysql.plugins.modules.mysql_clone.get_server_version',
+        lambda _cursor: '8.0.17',
+    )
+    monkeypatch.setattr(
+        'ansible_collections.ansible.mysql.plugins.modules.mysql_clone.ensure_clone_plugin_active',
+        lambda _module, _cursor: None,
+    )
+    monkeypatch.setattr(
+        'ansible_collections.ansible.mysql.plugins.modules.mysql_clone.validate_donor_allowed',
+        lambda _module, _cursor, _host, _port: None,
+    )
+    monkeypatch.setattr(
+        'ansible_collections.ansible.mysql.plugins.modules.mysql_clone.ensure_clone_not_running',
+        lambda _module, _status: None,
+    )
+    monkeypatch.setattr(
+        'ansible_collections.ansible.mysql.plugins.modules.mysql_clone.wait_for_clone_completion',
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError('wait should not be called')),
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        main()
+
+    assert str(exc.value) == "Clone failed to start. (1045, 'Access denied for user')"
+
+
+def test_main_waits_after_expected_restart_error(monkeypatch):
+    module = DummyModule()
+    module.params.update({
+        'login_user': 'root',
+        'login_password': 'secret',
+        'config_file': '~/.my.cnf',
+        'client_cert': None,
+        'client_key': None,
+        'ca_cert': None,
+        'check_hostname': None,
+        'connect_timeout': 30,
+        'wait_timeout': 30,
+        'poll_interval': 5,
+        'donor_host': '192.0.2.10',
+        'donor_port': 3307,
+        'donor_user': 'clone_user',
+        'donor_password': 'supersecret',
+        'require_ssl': None,
+    })
+    cursor = FailingCloneCursor("(3707, 'Restart server failed (mysqld is not managed by supervisor process).')")
+    connection = DummyConnection()
+
+    monkeypatch.setattr(
+        'ansible_collections.ansible.mysql.plugins.modules.mysql_clone.AnsibleModule',
+        lambda **kwargs: module,
+    )
+    monkeypatch.setattr(
+        'ansible_collections.ansible.mysql.plugins.modules.mysql_clone.mysql_driver',
+        object(),
+    )
+    monkeypatch.setattr(
+        'ansible_collections.ansible.mysql.plugins.modules.mysql_clone._connect',
+        lambda _module: (cursor, connection),
+    )
+    monkeypatch.setattr(
+        'ansible_collections.ansible.mysql.plugins.modules.mysql_clone.get_server_implementation',
+        lambda _cursor: 'mysql',
+    )
+    monkeypatch.setattr(
+        'ansible_collections.ansible.mysql.plugins.modules.mysql_clone.get_server_version',
+        lambda _cursor: '8.0.17',
+    )
+    monkeypatch.setattr(
+        'ansible_collections.ansible.mysql.plugins.modules.mysql_clone.ensure_clone_plugin_active',
+        lambda _module, _cursor: None,
+    )
+    monkeypatch.setattr(
+        'ansible_collections.ansible.mysql.plugins.modules.mysql_clone.validate_donor_allowed',
+        lambda _module, _cursor, _host, _port: None,
+    )
+    monkeypatch.setattr(
+        'ansible_collections.ansible.mysql.plugins.modules.mysql_clone.ensure_clone_not_running',
+        lambda _module, _status: None,
+    )
+    monkeypatch.setattr(
+        'ansible_collections.ansible.mysql.plugins.modules.mysql_clone.wait_for_clone_completion',
+        lambda *_args, **_kwargs: ({'STATE': 'Completed'}, [{'STAGE': 'RESTART', 'STATE': 'Completed'}]),
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        main()
+
+    result = exc.value.args[0]
+    assert result['changed'] is True
+    assert result['msg'] == 'Clone completed successfully.'
