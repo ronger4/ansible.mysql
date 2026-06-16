@@ -353,7 +353,7 @@ def test_main_fails_immediately_for_fatal_execute_error(monkeypatch):
     )
     monkeypatch.setattr(
         'ansible_collections.ansible.mysql.plugins.modules.mysql_clone.wait_for_clone_completion',
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError('wait should not be called')),
+        lambda *_args, **_kwargs: (unused_value for unused_value in ()).throw(AssertionError('wait should not be called')),
     )
 
     with pytest.raises(RuntimeError) as exc:
