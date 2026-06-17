@@ -2,11 +2,6 @@ from __future__ import (absolute_import, division, print_function)
 
 __metaclass__ = type
 
-try:
-    from unittest.mock import MagicMock
-except ImportError:
-    from mock import MagicMock
-
 import pytest
 
 from ansible_collections.ansible.mysql.plugins.module_utils.resource_group import (
