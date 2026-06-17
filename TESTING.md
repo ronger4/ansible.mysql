@@ -89,6 +89,7 @@ The Makefile accept the following options
   - Choices:
     - "test_mysql_binlog_info"
     - "test_mysql_db"
+    - "test_mysql_resource_group"
     - "test_mysql_info"
     - "test_mysql_query"
     - "test_mysql_replication"

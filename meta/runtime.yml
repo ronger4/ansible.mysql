@@ -7,6 +7,8 @@ action_groups:
     - mysql_info
     - mysql_query
     - mysql_replication
+    - mysql_resource_group
+    - mysql_resource_group_info
     - mysql_role
     - mysql_user
     - mysql_variables
