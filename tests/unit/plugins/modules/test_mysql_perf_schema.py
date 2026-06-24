@@ -1,18 +1,24 @@
 from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
+from contextlib import contextmanager
 import json
+import sys
 
 import pytest
 
 try:
     from unittest.mock import MagicMock
 except ImportError:
-    from mock import MagicMock
+    from mock import MagicMock  # pyright: ignore[reportMissingImports]
 
 from ansible.module_utils import basic
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.common.text.converters import to_bytes
+try:
+    from ansible.module_utils.testing import patch_module_args  # pyright: ignore[reportMissingImports]
+except ImportError:
+    patch_module_args = None
 
 from ansible_collections.ansible.mysql.plugins.modules import mysql_perf_schema
 from ansible_collections.ansible.mysql.plugins.modules.mysql_perf_schema import MySQLPerfSchema
@@ -35,8 +41,36 @@ def fail_json(*args, **kwargs):
     raise AnsibleFailJson(kwargs)
 
 
+@contextmanager
 def set_module_args(args):
-    basic._ANSIBLE_ARGS = to_bytes(json.dumps({'ANSIBLE_MODULE_ARGS': args}))
+    module_args = dict(args)
+
+    original_argv = sys.argv[:]
+    sys.argv = ['ansible_unittest']
+
+    try:
+        if patch_module_args is not None:
+            with patch_module_args(module_args):
+                yield
+            return
+
+        original_args = getattr(basic, '_ANSIBLE_ARGS', None)
+        original_profile = getattr(basic, '_ANSIBLE_PROFILE', None)
+        had_profile = hasattr(basic, '_ANSIBLE_PROFILE')
+
+        basic._ANSIBLE_ARGS = to_bytes(json.dumps({'ANSIBLE_MODULE_ARGS': module_args}))
+        basic._ANSIBLE_PROFILE = 'legacy'
+
+        try:
+            yield
+        finally:
+            basic._ANSIBLE_ARGS = original_args
+            if had_profile:
+                basic._ANSIBLE_PROFILE = original_profile
+            else:
+                delattr(basic, '_ANSIBLE_PROFILE')
+    finally:
+        sys.argv = original_argv
 
 
 def test_apply_in_check_mode_returns_predicted_queries_without_executing_updates():
@@ -184,18 +218,18 @@ def test_get_section_rows_selects_only_key_and_value_columns():
     ],
 )
 def test_main_validates_nested_required_fields_before_connect(monkeypatch, module_args, missing_fields):
-    set_module_args(module_args)
-    monkeypatch.setattr(AnsibleModule, 'exit_json', exit_json)
-    monkeypatch.setattr(AnsibleModule, 'fail_json', fail_json)
-    monkeypatch.setattr(mysql_perf_schema, 'mysql_driver', object())
+    with set_module_args(module_args):
+        monkeypatch.setattr(AnsibleModule, 'exit_json', exit_json)
+        monkeypatch.setattr(AnsibleModule, 'fail_json', fail_json)
+        monkeypatch.setattr(mysql_perf_schema, 'mysql_driver', object())
 
-    def unexpected_connect(*args, **kwargs):
-        raise AssertionError('mysql_connect should not be called')
+        def unexpected_connect(*args, **kwargs):
+            raise AssertionError('mysql_connect should not be called')
 
-    monkeypatch.setattr(mysql_perf_schema, 'mysql_connect', unexpected_connect)
+        monkeypatch.setattr(mysql_perf_schema, 'mysql_connect', unexpected_connect)
 
-    with pytest.raises(AnsibleFailJson) as exc:
-        mysql_perf_schema.main()
+        with pytest.raises(AnsibleFailJson) as exc:
+            mysql_perf_schema.main()
 
     message = exc.value.args[0]['msg']
     for field in missing_fields:
@@ -203,23 +237,23 @@ def test_main_validates_nested_required_fields_before_connect(monkeypatch, modul
 
 
 def test_main_returns_prefixed_validation_error_for_invalid_perf_schema_request(monkeypatch):
-    set_module_args(
+    with set_module_args(
         {
             'login_unix_socket': '/run/mysqld/mysqld.sock',
             'instruments': [{'name': 'statement/sql/select', 'enabled': True, 'timed': True}],
         }
-    )
-    monkeypatch.setattr(AnsibleModule, 'exit_json', exit_json)
-    monkeypatch.setattr(AnsibleModule, 'fail_json', fail_json)
-    monkeypatch.setattr(mysql_perf_schema, 'mysql_driver', object())
-    monkeypatch.setattr(mysql_perf_schema, 'mysql_connect', lambda *args, **kwargs: (MagicMock(), MagicMock()))
+    ):
+        monkeypatch.setattr(AnsibleModule, 'exit_json', exit_json)
+        monkeypatch.setattr(AnsibleModule, 'fail_json', fail_json)
+        monkeypatch.setattr(mysql_perf_schema, 'mysql_driver', object())
+        monkeypatch.setattr(mysql_perf_schema, 'mysql_connect', lambda *args, **kwargs: (MagicMock(), MagicMock()))
 
-    def invalid_request(self, params):
-        raise ValueError('bad request')
+        def invalid_request(self, params):
+            raise ValueError('bad request')
 
-    monkeypatch.setattr(mysql_perf_schema.MySQLPerfSchema, 'apply', invalid_request)
+        monkeypatch.setattr(mysql_perf_schema.MySQLPerfSchema, 'apply', invalid_request)
 
-    with pytest.raises(AnsibleFailJson) as exc:
-        mysql_perf_schema.main()
+        with pytest.raises(AnsibleFailJson) as exc:
+            mysql_perf_schema.main()
 
     assert exc.value.args[0]['msg'] == 'invalid performance schema request: bad request'
