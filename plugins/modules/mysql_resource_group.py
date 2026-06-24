@@ -64,7 +64,6 @@ options:
       - This only applies when O(state=absent).
     type: bool
     default: false
-    version_added: '5.1.0'
 
 notes:
   - This module supports MySQL 8.0 or later only.
