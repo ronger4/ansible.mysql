@@ -27,7 +27,6 @@ options:
     description:
       - Enable or disable the slow query log.
     type: bool
-    version_added: '5.1.0'
   long_query_time:
     description:
       - Log queries that run longer than this number of seconds.
