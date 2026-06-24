@@ -58,7 +58,6 @@ options:
       - Whether the resource group should be enabled.
       - When omitted for an existing resource group, the current value is left unchanged.
     type: bool
-    version_added: '5.1.0'
   force:
     description:
       - If C(true), use C(FORCE) when dropping a resource group.
