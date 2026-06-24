@@ -22,6 +22,8 @@ description:
 author:
 - Ron Gershburg (@rgershbu)
 
+version_added: '5.1.0'
+
 options:
   donor_host:
     description:
