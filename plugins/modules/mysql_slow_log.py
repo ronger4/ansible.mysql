@@ -54,7 +54,7 @@ options:
   flush:
     description:
       - Rotate the slow query log by executing C(FLUSH SLOW LOGS).
-      - This requires the effective C(log_output) to include C(FILE).
+      - This requires the effective O(log_output) to include V(FILE).
       - This action is not idempotent and always reports a change when requested.
     type: bool
     default: false
