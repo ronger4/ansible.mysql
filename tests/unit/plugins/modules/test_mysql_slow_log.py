@@ -5,7 +5,7 @@ __metaclass__ = type
 
 import pytest
 
-from ansible_collections.ansible.mysql.plugins.modules.mysql_slow_log import MySQLSlowLog
+from ansible_collections.ansible.mysql.plugins.modules.mysql_slow_log import MySQLSlowLog, typedvalue
 
 
 class FakeCursor(object):
@@ -44,6 +44,40 @@ class FakeCursor(object):
 class ModuleStub(object):
     def fail_json(self, **kwargs):
         raise RuntimeError(kwargs['msg'])
+
+
+def test_typedvalue_raises_type_error_for_none():
+    with pytest.raises(TypeError):
+        typedvalue(None)
+
+
+@pytest.mark.parametrize('value', ['', 'invalid'])
+def test_normalize_log_output_rejects_empty_and_invalid_values(value):
+    slow_log = MySQLSlowLog(ModuleStub(), FakeCursor({}), 'mysql')
+
+    with pytest.raises(RuntimeError) as exc_info:
+        slow_log.normalize_log_output(value)
+
+    assert str(exc_info.value) == 'log_output must be FILE, TABLE, NONE, or FILE,TABLE'
+
+
+@pytest.mark.parametrize('value', ['NONE,FILE', 'TABLE,NONE'])
+def test_normalize_log_output_rejects_none_combined_with_other_values(value):
+    slow_log = MySQLSlowLog(ModuleStub(), FakeCursor({}), 'mysql')
+
+    with pytest.raises(RuntimeError) as exc_info:
+        slow_log.normalize_log_output(value)
+
+    assert str(exc_info.value) == 'log_output cannot combine NONE with other values'
+
+
+def test_read_setting_fails_when_variable_is_not_available():
+    slow_log = MySQLSlowLog(ModuleStub(), FakeCursor({}), 'mysql')
+
+    with pytest.raises(RuntimeError) as exc_info:
+        slow_log.read_setting('log_output')
+
+    assert str(exc_info.value) == 'Slow log setting "log_output" is not available on this server.'
 
 
 def test_configure_returns_unchanged_when_settings_already_match():

@@ -18,7 +18,7 @@ description:
   - Supports enabling the slow query log, setting thresholds and output, and rotating file-based slow logs.
 
 author:
-  - Ron Gershburg (@rgershbu)
+  - Ron Gershburg (@ronger4)
 
 version_added: '5.1.0'
 
@@ -86,7 +86,7 @@ EXAMPLES = r'''
 - name: Enable slow query logging to a file with a one second threshold
   ansible.mysql.mysql_slow_log:
     login_user: root
-    login_unix_socket: /run/mysqld/mysqld.sock
+    login_password: rootpass
     enabled: true
     long_query_time: 1
     log_output: FILE
@@ -148,12 +148,12 @@ def typedvalue(value):
 
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except ValueError:
         pass
 
     try:
         return float(value)
-    except (TypeError, ValueError):
+    except ValueError:
         pass
 
     return value
