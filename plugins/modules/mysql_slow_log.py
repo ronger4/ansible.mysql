@@ -31,7 +31,6 @@ options:
     description:
       - Log queries that run longer than this number of seconds.
     type: float
-    version_added: '5.1.0'
   log_output:
     description:
       - Output destination for the slow query log.
