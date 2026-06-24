@@ -34,8 +34,8 @@ options:
   log_output:
     description:
       - Output destination for the slow query log.
-      - Use C(FILE,TABLE) to log to both destinations.
-      - The module normalizes C(TABLE,FILE) to C(FILE,TABLE).
+      - Use V(FILE,TABLE) to log to both destinations.
+      - The module normalizes V(TABLE,FILE) to V(FILE,TABLE).
     type: str
     choices:
       - FILE
