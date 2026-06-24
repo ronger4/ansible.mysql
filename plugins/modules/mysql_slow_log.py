@@ -43,7 +43,6 @@ options:
       - NONE
       - FILE,TABLE
       - TABLE,FILE
-    version_added: '5.1.0'
   log_queries_not_using_indexes:
     description:
       - Whether to log queries that do not use indexes.
