@@ -53,7 +53,6 @@ options:
       - Must be between C(0) and C(19) for C(USER) resource groups.
       - When omitted for an existing resource group, the current value is left unchanged.
     type: int
-    version_added: '5.1.0'
   enabled:
     description:
       - Whether the resource group should be enabled.
