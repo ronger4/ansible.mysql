@@ -12,6 +12,7 @@
       login_host: '{{ mysql_host }}'
       login_port: '{{ mysql_primary_port }}'
     resource_group_name: ansible_reporting
+    system_resource_group_name: ansible_system_reporting
 
   block:
     - name: Resource group | Expect module to fail on unsupported servers
@@ -72,6 +73,65 @@
         <<: *mysql_params
         name: '{{ resource_group_name }}'
         state: absent
+
+    - name: Resource group | Ensure SYSTEM resource group is absent
+      ansible.mysql.mysql_resource_group:
+        <<: *mysql_params
+        name: '{{ system_resource_group_name }}'
+        state: absent
+
+    - name: Resource group | Fail create without resource_group_type
+      ansible.mysql.mysql_resource_group:
+        <<: *mysql_params
+        name: '{{ resource_group_name }}'
+        state: present
+      register: result
+      ignore_errors: true
+
+    - name: Resource group | Assert missing-type failure
+      ansible.builtin.assert:
+        that:
+          - result is failed
+          - "'resource_group_type is required when creating a resource group' in result.msg"
+
+    - name: Resource group | Create SYSTEM resource group in check mode
+      ansible.mysql.mysql_resource_group:
+        <<: *mysql_params
+        name: '{{ system_resource_group_name }}'
+        state: present
+        resource_group_type: SYSTEM
+        vcpu_ids: '{{ first_vcpu }}'
+        thread_priority: -1
+        enabled: false
+      check_mode: true
+      register: result
+
+    - name: Resource group | Assert SYSTEM create check mode result
+      ansible.builtin.assert:
+        that:
+          - result is changed
+          - result.queries | length == 1
+          - "'CREATE RESOURCE GROUP' in result.queries[0]"
+          - "'TYPE = SYSTEM' in result.queries[0]"
+          - result.resource_group.name == system_resource_group_name
+          - result.resource_group.resource_group_type == 'SYSTEM'
+          - result.resource_group.enabled == false
+          - result.resource_group.vcpu_ids == first_vcpu
+          - result.resource_group.thread_priority == -1
+
+    - name: Resource group | Verify SYSTEM resource group does not exist after check mode
+      ansible.mysql.mysql_query:
+        <<: *mysql_params
+        query: >
+          SELECT RESOURCE_GROUP_NAME
+          FROM INFORMATION_SCHEMA.RESOURCE_GROUPS
+          WHERE RESOURCE_GROUP_NAME = '{{ system_resource_group_name }}'
+      register: result
+
+    - name: Resource group | Assert SYSTEM resource group absent after check mode
+      ansible.builtin.assert:
+        that:
+          - result.rowcount[0] == 0
 
     - name: Resource group | Create in check mode
       ansible.mysql.mysql_resource_group:
@@ -351,6 +411,7 @@
         <<: *mysql_params
         name: '{{ resource_group_name }}'
         state: absent
+        force: true
       check_mode: true
       register: result
 
@@ -358,7 +419,7 @@
       ansible.builtin.assert:
         that:
           - result is changed
-          - result.queries[0] == ('DROP RESOURCE GROUP `' ~ resource_group_name ~ '`')
+          - result.queries[0] == ('DROP RESOURCE GROUP `' ~ resource_group_name ~ '` FORCE')
 
     - name: Resource group | Verify resource group exists after absent check mode
       ansible.mysql.mysql_query:
@@ -400,3 +461,15 @@
       ansible.builtin.assert:
         that:
           - result.rowcount[0] == 0
+
+    - name: Resource group | Re-remove resource group
+      ansible.mysql.mysql_resource_group:
+        <<: *mysql_params
+        name: '{{ resource_group_name }}'
+        state: absent
+      register: result
+
+    - name: Resource group | Assert absent idempotency
+      ansible.builtin.assert:
+        that:
+          - result is not changed

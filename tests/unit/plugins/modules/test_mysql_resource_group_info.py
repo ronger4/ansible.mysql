@@ -8,7 +8,7 @@ try:
 except ImportError:
     from mock import MagicMock
 
-from ansible_collections.ansible.mysql.plugins.modules.mysql_resource_group_info import MySQLResourceGroupsInfo
+from ansible_collections.ansible.mysql.plugins.modules.mysql_resource_group_info import get_resource_groups_info
 
 
 def test_get_info_returns_normalized_resource_groups():
@@ -30,9 +30,7 @@ def test_get_info_returns_normalized_resource_groups():
         },
     ]
 
-    info = MySQLResourceGroupsInfo(cursor)
-
-    assert info.get_info() == {
+    assert get_resource_groups_info(cursor) == {
         'resource_groups': [
             {
                 'name': 'USR_default',
@@ -68,9 +66,7 @@ def test_get_info_filters_by_name():
         }
     ]
 
-    info = MySQLResourceGroupsInfo(cursor)
-
-    assert info.get_info(name='reporting') == {
+    assert get_resource_groups_info(cursor, name='reporting') == {
         'resource_groups': [
             {
                 'name': 'reporting',

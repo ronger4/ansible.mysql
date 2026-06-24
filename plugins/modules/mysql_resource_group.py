@@ -90,7 +90,7 @@ seealso:
     link: https://dev.mysql.com/doc/refman/8.4/en/drop-resource-group.html
 
 author:
-  - Ron Gershburg (@rgershbu)
+  - Ron Gershburg (@ronger4)
 
 
 extends_documentation_fragment:
@@ -180,15 +180,22 @@ RESOURCE_GROUP_QUERY = (
 )
 
 
+def normalize_resource_group_inputs(resource_group_type=None, vcpu_ids=None):
+    if resource_group_type is not None:
+        resource_group_type = validate_resource_group_type(resource_group_type)
+    if vcpu_ids is not None:
+        vcpu_ids = normalize_vcpu_ids(vcpu_ids)
+    return resource_group_type, vcpu_ids
+
+
 def build_create_query(name, resource_group_type, vcpu_ids=None, thread_priority=None, enabled=None):
-    resource_group_type = validate_resource_group_type(resource_group_type)
     query = [
         'CREATE RESOURCE GROUP %s' % mysql_quote_identifier(name, 'role'),
         'TYPE = %s' % resource_group_type,
     ]
 
     if vcpu_ids is not None:
-        query.append('VCPU = %s' % normalize_vcpu_ids(vcpu_ids))
+        query.append('VCPU = %s' % vcpu_ids)
 
     if thread_priority is not None:
         query.append('THREAD_PRIORITY = %s' % validate_thread_priority(resource_group_type, thread_priority))
@@ -203,16 +210,14 @@ def build_create_query(name, resource_group_type, vcpu_ids=None, thread_priority
 
 def build_alter_query(name, current, resource_group_type=None, vcpu_ids=None, thread_priority=None, enabled=None):
     if resource_group_type is not None:
-        desired_type = validate_resource_group_type(resource_group_type)
-        if current['resource_group_type'] != desired_type:
+        if current['resource_group_type'] != resource_group_type:
             raise ValueError('resource_group_type is immutable after creation')
 
     changes = []
 
     if vcpu_ids is not None:
-        normalized_vcpu_ids = normalize_vcpu_ids(vcpu_ids)
-        if current['vcpu_ids'] != normalized_vcpu_ids:
-            changes.append('VCPU = %s' % normalized_vcpu_ids)
+        if current['vcpu_ids'] != vcpu_ids:
+            changes.append('VCPU = %s' % vcpu_ids)
 
     if thread_priority is not None:
         normalized_priority = validate_thread_priority(current['resource_group_type'], thread_priority)
@@ -247,7 +252,6 @@ def get_resource_group(cursor, name):
 
 def execute_query(cursor, query):
     cursor.execute(query)
-    cursor.fetchall()
 
 
 def fail_if_default_resource_group(module, name):
@@ -329,10 +333,7 @@ def main():
     queries = []
 
     try:
-        if resource_group_type is not None:
-            resource_group_type = validate_resource_group_type(resource_group_type)
-        if vcpu_ids is not None:
-            vcpu_ids = normalize_vcpu_ids(vcpu_ids)
+        resource_group_type, vcpu_ids = normalize_resource_group_inputs(resource_group_type, vcpu_ids)
     except ValueError as e:
         module.fail_json(msg=to_native(e))
 

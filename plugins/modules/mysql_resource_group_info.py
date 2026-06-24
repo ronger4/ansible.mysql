@@ -42,7 +42,7 @@ seealso:
     link: https://dev.mysql.com/doc/refman/8.4/en/information-schema-resource-groups-table.html
 
 author:
-  - Ron Gershburg (@rgershbu)
+  - Ron Gershburg (@ronger4)
 
 extends_documentation_fragment:
   - ansible.mysql.mysql
@@ -103,31 +103,27 @@ from ansible_collections.ansible.mysql.plugins.module_utils.resource_group impor
 )
 
 
-class MySQLResourceGroupsInfo(object):
-    def __init__(self, cursor):
-        self.cursor = cursor
+def get_resource_groups_info(cursor, name=None):
+    query = (
+        'SELECT RESOURCE_GROUP_NAME, RESOURCE_GROUP_TYPE, RESOURCE_GROUP_ENABLED, VCPU_IDS, THREAD_PRIORITY '
+        'FROM INFORMATION_SCHEMA.RESOURCE_GROUPS'
+    )
+    params = None
 
-    def get_info(self, name=None):
-        query = (
-            'SELECT RESOURCE_GROUP_NAME, RESOURCE_GROUP_TYPE, RESOURCE_GROUP_ENABLED, VCPU_IDS, THREAD_PRIORITY '
-            'FROM INFORMATION_SCHEMA.RESOURCE_GROUPS'
-        )
-        params = None
+    if name:
+        query += ' WHERE RESOURCE_GROUP_NAME = %s'
+        params = (name,)
 
-        if name:
-            query += ' WHERE RESOURCE_GROUP_NAME = %s'
-            params = (name,)
+    query += ' ORDER BY RESOURCE_GROUP_NAME'
 
-        query += ' ORDER BY RESOURCE_GROUP_NAME'
+    if params:
+        cursor.execute(query, params)
+    else:
+        cursor.execute(query)
 
-        if params:
-            self.cursor.execute(query, params)
-        else:
-            self.cursor.execute(query)
-
-        return {
-            'resource_groups': [normalize_resource_group_row(row) for row in self.cursor.fetchall()]
-        }
+    return {
+        'resource_groups': [normalize_resource_group_row(row) for row in cursor.fetchall()]
+    }
 
 
 def main():
@@ -171,9 +167,7 @@ def main():
         module.fail_json(msg='unable to connect to database: %s' % to_native(e))
 
     ensure_resource_groups_supported(module, cursor)
-    info = MySQLResourceGroupsInfo(cursor)
-
-    module.exit_json(changed=False, **info.get_info(name))
+    module.exit_json(changed=False, **get_resource_groups_info(cursor, name))
 
 
 if __name__ == '__main__':
