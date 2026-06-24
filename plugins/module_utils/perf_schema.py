@@ -1,7 +1,7 @@
 from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
-from ansible_collections.ansible.mysql.plugins.module_utils.mysql import get_server_version
+"""Shared table-driven helpers for Performance Schema setup sections."""
 
 
 SECTION_DEFINITIONS = {
@@ -42,22 +42,6 @@ SECTION_DEFINITIONS = {
         'allow_delete': True,
     },
 }
-
-
-def get_server_version_tuple(cursor):
-    version = get_server_version(cursor).split('-', 1)[0]
-    version_tuple = []
-
-    for part in version.split('.'):
-        digits = ''.join(char for char in part if char.isdigit())
-        if not digits:
-            break
-        version_tuple.append(int(digits))
-
-    while len(version_tuple) < 3:
-        version_tuple.append(0)
-
-    return tuple(version_tuple[:3])
 
 
 def normalize_perf_schema_bool(value):
@@ -286,4 +270,5 @@ def _format_perf_schema_bool(value):
 
 
 def _quote_sql_value(value):
+    # This is only for human-readable query output in result['queries'].
     return "'%s'" % str(value).replace("'", "''")

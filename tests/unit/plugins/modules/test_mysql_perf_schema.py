@@ -1,12 +1,42 @@
 from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
+import json
+
+import pytest
+
 try:
     from unittest.mock import MagicMock
 except ImportError:
     from mock import MagicMock
 
-from ansible_collections.ansible.mysql.plugins.modules.mysql_perf_schema import MySQL_Perf_Schema
+from ansible.module_utils import basic
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.common.text.converters import to_bytes
+
+from ansible_collections.ansible.mysql.plugins.modules import mysql_perf_schema
+from ansible_collections.ansible.mysql.plugins.modules.mysql_perf_schema import MySQLPerfSchema
+
+
+class AnsibleExitJson(Exception):
+    pass
+
+
+class AnsibleFailJson(Exception):
+    pass
+
+
+def exit_json(*args, **kwargs):
+    raise AnsibleExitJson(kwargs)
+
+
+def fail_json(*args, **kwargs):
+    kwargs['failed'] = True
+    raise AnsibleFailJson(kwargs)
+
+
+def set_module_args(args):
+    basic._ANSIBLE_ARGS = to_bytes(json.dumps({'ANSIBLE_MODULE_ARGS': args}))
 
 
 def test_apply_in_check_mode_returns_predicted_queries_without_executing_updates():
@@ -24,7 +54,7 @@ def test_apply_in_check_mode_returns_predicted_queries_without_executing_updates
     def execute_side_effect(query, params=None):
         if query.startswith('SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS'):
             cursor.fetchall.return_value = support_rows
-        elif query == 'SELECT * FROM performance_schema.setup_instruments':
+        elif query == 'SELECT NAME, ENABLED, TIMED FROM performance_schema.setup_instruments':
             cursor.fetchall.return_value = current_rows
         else:
             raise AssertionError('Unexpected query: %s' % query)
@@ -33,7 +63,7 @@ def test_apply_in_check_mode_returns_predicted_queries_without_executing_updates
 
     module = MagicMock()
     module.check_mode = True
-    executor = MySQL_Perf_Schema(module, cursor)
+    executor = MySQLPerfSchema(module, cursor)
 
     result = executor.apply({
         'instruments': [
@@ -79,9 +109,9 @@ def test_apply_executes_mutations_and_returns_rows_for_multiple_sections():
     def execute_side_effect(query, params=None):
         if query.startswith('SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS'):
             cursor.fetchall.return_value = support_rows
-        elif query == 'SELECT * FROM performance_schema.setup_consumers':
+        elif query == 'SELECT NAME, ENABLED FROM performance_schema.setup_consumers':
             cursor.fetchall.return_value = consumer_rows
-        elif query == 'SELECT * FROM performance_schema.setup_actors':
+        elif query == 'SELECT HOST, USER, ROLE, ENABLED, HISTORY FROM performance_schema.setup_actors':
             cursor.fetchall.return_value = actor_rows
         else:
             cursor.fetchall.return_value = []
@@ -90,7 +120,7 @@ def test_apply_executes_mutations_and_returns_rows_for_multiple_sections():
 
     module = MagicMock()
     module.check_mode = False
-    executor = MySQL_Perf_Schema(module, cursor)
+    executor = MySQLPerfSchema(module, cursor)
 
     result = executor.apply({
         'consumers': [
@@ -119,3 +149,77 @@ def test_apply_executes_mutations_and_returns_rows_for_multiple_sections():
     }
     assert cursor.execute.call_args_list[2][0][0].startswith('UPDATE performance_schema.setup_consumers')
     assert cursor.execute.call_args_list[4][0][0].startswith('INSERT INTO performance_schema.setup_actors')
+
+
+def test_get_section_rows_selects_only_key_and_value_columns():
+    cursor = MagicMock()
+    cursor.fetchall.return_value = []
+
+    executor = MySQLPerfSchema(MagicMock(), cursor)
+
+    executor.get_section_rows('objects')
+
+    cursor.execute.assert_called_once_with(
+        'SELECT OBJECT_TYPE, OBJECT_SCHEMA, OBJECT_NAME, ENABLED, TIMED FROM performance_schema.setup_objects'
+    )
+
+
+@pytest.mark.parametrize(
+    'module_args,missing_fields',
+    [
+        (
+            {
+                'login_unix_socket': '/run/mysqld/mysqld.sock',
+                'actors': [{'user': 'app', 'host': '%', 'role': '%'}],
+            },
+            ('enabled', 'history'),
+        ),
+        (
+            {
+                'login_unix_socket': '/run/mysqld/mysqld.sock',
+                'objects': [{'object_type': 'TABLE', 'object_schema': 'app', 'object_name': 'orders'}],
+            },
+            ('enabled', 'timed'),
+        ),
+    ],
+)
+def test_main_validates_nested_required_fields_before_connect(monkeypatch, module_args, missing_fields):
+    set_module_args(module_args)
+    monkeypatch.setattr(AnsibleModule, 'exit_json', exit_json)
+    monkeypatch.setattr(AnsibleModule, 'fail_json', fail_json)
+    monkeypatch.setattr(mysql_perf_schema, 'mysql_driver', object())
+
+    def unexpected_connect(*args, **kwargs):
+        raise AssertionError('mysql_connect should not be called')
+
+    monkeypatch.setattr(mysql_perf_schema, 'mysql_connect', unexpected_connect)
+
+    with pytest.raises(AnsibleFailJson) as exc:
+        mysql_perf_schema.main()
+
+    message = exc.value.args[0]['msg']
+    for field in missing_fields:
+        assert field in message
+
+
+def test_main_returns_prefixed_validation_error_for_invalid_perf_schema_request(monkeypatch):
+    set_module_args(
+        {
+            'login_unix_socket': '/run/mysqld/mysqld.sock',
+            'instruments': [{'name': 'statement/sql/select', 'enabled': True, 'timed': True}],
+        }
+    )
+    monkeypatch.setattr(AnsibleModule, 'exit_json', exit_json)
+    monkeypatch.setattr(AnsibleModule, 'fail_json', fail_json)
+    monkeypatch.setattr(mysql_perf_schema, 'mysql_driver', object())
+    monkeypatch.setattr(mysql_perf_schema, 'mysql_connect', lambda *args, **kwargs: (MagicMock(), MagicMock()))
+
+    def invalid_request(self, params):
+        raise ValueError('bad request')
+
+    monkeypatch.setattr(mysql_perf_schema.MySQLPerfSchema, 'apply', invalid_request)
+
+    with pytest.raises(AnsibleFailJson) as exc:
+        mysql_perf_schema.main()
+
+    assert exc.value.args[0]['msg'] == 'invalid performance schema request: bad request'

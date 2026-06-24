@@ -20,7 +20,7 @@ description:
   - This module manages runtime state only. Restart-persistent Performance Schema configuration remains outside its scope.
 
 author:
-  - Ron Gershburg (@rgershbu)
+  - Ron Gershburg (@ronger4)
 
 version_added: '5.1.0'
 
@@ -34,7 +34,7 @@ options:
     suboptions:
       name:
         description:
-          - Instrument name.
+          - Instrument name or pattern from C(performance_schema.setup_instruments), for example C(statement/%).
         type: str
         required: true
       enabled:
@@ -226,21 +226,40 @@ instruments:
   returned: when O(instruments) is provided
   type: list
   elements: dict
+  sample:
+    - name: statement/sql/select
+      enabled: true
+      timed: true
 consumers:
   description: Normalized requested consumer rows after module execution or prediction.
   returned: when O(consumers) is provided
   type: list
   elements: dict
+  sample:
+    - name: events_waits_current
+      enabled: true
 actors:
   description: Normalized requested actor rows after module execution or prediction.
   returned: when O(actors) is provided
   type: list
   elements: dict
+  sample:
+    - user: app
+      host: '%'
+      role: '%'
+      enabled: true
+      history: false
 objects:
   description: Normalized requested object rows after module execution or prediction.
   returned: when O(objects) is provided
   type: list
   elements: dict
+  sample:
+    - object_type: TABLE
+      object_schema: reporting
+      object_name: slow_queries
+      enabled: true
+      timed: false
 '''
 
 from ansible.module_utils.basic import AnsibleModule
@@ -259,7 +278,7 @@ from ansible_collections.ansible.mysql.plugins.module_utils.perf_schema import (
 )
 
 
-class MySQL_Perf_Schema(object):
+class MySQLPerfSchema(object):
     def __init__(self, module, cursor):
         self.module = module
         self.cursor = cursor
@@ -289,7 +308,9 @@ class MySQL_Perf_Schema(object):
         return result
 
     def get_section_rows(self, section):
-        query = 'SELECT * FROM performance_schema.%s' % SECTION_DEFINITIONS[section]['table']
+        definition = SECTION_DEFINITIONS[section]
+        fields = ', '.join(definition['db_key_fields'] + definition['db_value_fields'])
+        query = 'SELECT %s FROM performance_schema.%s' % (fields, definition['table'])
         self.cursor.execute(query)
         return self.cursor.fetchall()
 
@@ -322,6 +343,7 @@ def main():
         actors=dict(
             type='list',
             elements='dict',
+            required_if=[('state', 'present', ('enabled', 'history'))],
             options=dict(
                 user=dict(type='str', required=True),
                 host=dict(type='str', required=True),
@@ -334,6 +356,7 @@ def main():
         objects=dict(
             type='list',
             elements='dict',
+            required_if=[('state', 'present', ('enabled', 'timed'))],
             options=dict(
                 object_type=dict(type='str', required=True),
                 object_schema=dict(type='str', required=True),
@@ -371,12 +394,12 @@ def main():
     except Exception as e:
         module.fail_json(msg='unable to connect to database: %s' % to_native(e))
 
-    executor = MySQL_Perf_Schema(module, cursor)
+    executor = MySQLPerfSchema(module, cursor)
 
     try:
         result = executor.apply(module.params)
     except ValueError as e:
-        module.fail_json(msg=to_native(e))
+        module.fail_json(msg='invalid performance schema request: %s' % to_native(e))
     except Exception as e:
         module.fail_json(msg=to_native(e))
 

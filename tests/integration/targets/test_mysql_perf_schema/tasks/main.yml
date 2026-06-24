@@ -61,6 +61,26 @@
         consumer_enabled_initial: "{{ consumer_row.query_result[0][0]['ENABLED'] | upper == 'YES' }}"
         consumer_enabled_desired: "{{ not (consumer_row.query_result[0][0]['ENABLED'] | upper == 'YES') }}"
 
+    - name: Perf schema | Select one wildcard instrument row
+      ansible.mysql.mysql_query:
+        <<: *mysql_params
+        query: >
+          SELECT NAME, ENABLED, TIMED
+          FROM performance_schema.setup_instruments
+          WHERE NAME LIKE '%/%'
+            AND TIMED IS NOT NULL
+          ORDER BY NAME
+          LIMIT 1
+      register: wildcard_instrument_row
+
+    - name: Perf schema | Set wildcard instrument facts
+      ansible.builtin.set_fact:
+        wildcard_instrument_name: "{{ wildcard_instrument_row.query_result[0][0]['NAME'] }}"
+        wildcard_instrument_enabled_initial: "{{ wildcard_instrument_row.query_result[0][0]['ENABLED'] | upper == 'YES' }}"
+        wildcard_instrument_timed_initial: "{{ wildcard_instrument_row.query_result[0][0]['TIMED'] | upper == 'YES' }}"
+        wildcard_instrument_enabled_desired: "{{ not (wildcard_instrument_row.query_result[0][0]['ENABLED'] | upper == 'YES') }}"
+        wildcard_instrument_timed_desired: "{{ not (wildcard_instrument_row.query_result[0][0]['TIMED'] | upper == 'YES') }}"
+
     - name: Perf schema | Update instrument and consumer in check mode
       ansible.mysql.mysql_perf_schema:
         <<: *mysql_params
@@ -163,6 +183,55 @@
       ansible.builtin.assert:
         that:
           - result is not changed
+
+    - name: Perf schema | Update wildcard instrument row
+      ansible.mysql.mysql_perf_schema:
+        <<: *mysql_params
+        instruments:
+          - name: '{{ wildcard_instrument_name }}'
+            enabled: '{{ wildcard_instrument_enabled_desired }}'
+            timed: '{{ wildcard_instrument_timed_desired }}'
+      register: result
+
+    - name: Perf schema | Assert wildcard instrument update result
+      ansible.builtin.assert:
+        that:
+          - result is changed
+          - result.instruments[0].name == wildcard_instrument_name
+          - result.instruments[0].enabled == wildcard_instrument_enabled_desired
+          - result.instruments[0].timed == wildcard_instrument_timed_desired
+
+    - name: Perf schema | Verify wildcard instrument changed in database
+      ansible.mysql.mysql_query:
+        <<: *mysql_params
+        query: >
+          SELECT ENABLED, TIMED
+          FROM performance_schema.setup_instruments
+          WHERE NAME = '{{ wildcard_instrument_name }}'
+      register: result
+
+    - name: Perf schema | Assert wildcard instrument changed in database
+      ansible.builtin.assert:
+        that:
+          - (result.query_result[0][0]['ENABLED'] | upper == 'YES') == wildcard_instrument_enabled_desired
+          - (result.query_result[0][0]['TIMED'] | upper == 'YES') == wildcard_instrument_timed_desired
+
+    - name: Perf schema | Fail when instrument row does not exist
+      ansible.mysql.mysql_perf_schema:
+        <<: *mysql_params
+        instruments:
+          - name: ansible/nonexistent/instrument
+            enabled: true
+            timed: true
+      register: result
+      ignore_errors: true
+
+    - name: Perf schema | Assert missing instrument failure
+      ansible.builtin.assert:
+        that:
+          - result is failed
+          - "'invalid performance schema request:' in result.msg"
+          - "'ansible/nonexistent/instrument' in result.msg"
 
     - name: Perf schema | Ensure actor and object rows are absent
       ansible.mysql.mysql_perf_schema:
@@ -288,6 +357,58 @@
           - result.query_result[1][0]['ENABLED'] | upper == 'YES'
           - result.query_result[1][0]['TIMED'] | upper == 'NO'
 
+    - name: Perf schema | Update actor and object rows
+      ansible.mysql.mysql_perf_schema:
+        <<: *mysql_params
+        actors:
+          - user: '{{ actor_user }}'
+            host: '{{ actor_host }}'
+            role: '{{ actor_role }}'
+            enabled: false
+            history: true
+        objects:
+          - object_type: '{{ object_type }}'
+            object_schema: '{{ object_schema }}'
+            object_name: '{{ object_name }}'
+            enabled: false
+            timed: true
+      register: result
+
+    - name: Perf schema | Assert actor and object update result
+      ansible.builtin.assert:
+        that:
+          - result is changed
+          - not result.actors[0].enabled
+          - result.actors[0].history
+          - not result.objects[0].enabled
+          - result.objects[0].timed
+
+    - name: Perf schema | Verify actor and object updates in database
+      ansible.mysql.mysql_query:
+        <<: *mysql_params
+        query:
+          - >
+            SELECT ENABLED, HISTORY
+            FROM performance_schema.setup_actors
+            WHERE HOST = '{{ actor_host }}'
+              AND USER = '{{ actor_user }}'
+              AND ROLE = '{{ actor_role }}'
+          - >
+            SELECT ENABLED, TIMED
+            FROM performance_schema.setup_objects
+            WHERE OBJECT_TYPE = '{{ object_type }}'
+              AND OBJECT_SCHEMA = '{{ object_schema }}'
+              AND OBJECT_NAME = '{{ object_name }}'
+      register: result
+
+    - name: Perf schema | Assert actor and object updates in database
+      ansible.builtin.assert:
+        that:
+          - result.query_result[0][0]['ENABLED'] | upper == 'NO'
+          - result.query_result[0][0]['HISTORY'] | upper == 'YES'
+          - result.query_result[1][0]['ENABLED'] | upper == 'NO'
+          - result.query_result[1][0]['TIMED'] | upper == 'YES'
+
     - name: Perf schema | Re-apply actor and object
       ansible.mysql.mysql_perf_schema:
         <<: *mysql_params
@@ -295,14 +416,14 @@
           - user: '{{ actor_user }}'
             host: '{{ actor_host }}'
             role: '{{ actor_role }}'
-            enabled: true
-            history: false
+            enabled: false
+            history: true
         objects:
           - object_type: '{{ object_type }}'
             object_schema: '{{ object_schema }}'
             object_name: '{{ object_name }}'
-            enabled: true
-            timed: false
+            enabled: false
+            timed: true
       register: result
 
     - name: Perf schema | Assert idempotent apply for actor and object
@@ -409,6 +530,9 @@
           - name: '{{ instrument_name }}'
             enabled: '{{ instrument_enabled_initial }}'
             timed: '{{ instrument_timed_initial }}'
+          - name: '{{ wildcard_instrument_name }}'
+            enabled: '{{ wildcard_instrument_enabled_initial }}'
+            timed: '{{ wildcard_instrument_timed_initial }}'
         consumers:
           - name: '{{ consumer_name }}'
             enabled: '{{ consumer_enabled_initial }}'

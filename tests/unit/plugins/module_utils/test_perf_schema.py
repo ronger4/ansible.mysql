@@ -10,28 +10,10 @@ except ImportError:
 
 from ansible_collections.ansible.mysql.plugins.module_utils.perf_schema import (
     ensure_perf_schema_sections_supported,
-    get_server_version_tuple,
     normalize_perf_schema_item,
     normalize_perf_schema_row,
     plan_section_changes,
 )
-
-
-class dummy_cursor_class():
-    def __init__(self, output):
-        self.output = output
-
-    def execute(self, query):
-        pass
-
-    def fetchone(self):
-        return {'version': self.output}
-
-
-def test_get_server_version_tuple_strips_engine_suffix():
-    cursor = dummy_cursor_class('10.11.8-MariaDB-1:10.11.8+maria~ubu2204')
-
-    assert get_server_version_tuple(cursor) == (10, 11, 8)
 
 
 def test_normalize_perf_schema_item_for_instrument_converts_bool_values():
@@ -139,6 +121,20 @@ def test_plan_section_changes_inserts_and_deletes_actors():
             'history': False,
         }
     ]
+
+
+def test_plan_section_changes_fails_for_missing_non_insertable_row():
+    with pytest.raises(ValueError) as exc:
+        plan_section_changes(
+            'instruments',
+            [{'name': 'statement/%', 'enabled': True, 'timed': True}],
+            [],
+        )
+
+    assert str(exc.value) == (
+        "Performance Schema section 'instruments' does not contain the requested row "
+        "{'name': 'statement/%'}"
+    )
 
 
 def test_ensure_perf_schema_sections_supported_fails_when_columns_are_missing():
