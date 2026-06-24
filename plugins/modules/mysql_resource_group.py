@@ -46,7 +46,6 @@ options:
       - Examples include C(0-3) and C(0-3,8,10-12).
       - When omitted for an existing resource group, the current value is left unchanged.
     type: str
-    version_added: '5.1.0'
   thread_priority:
     description:
       - Thread priority to set for the resource group.
