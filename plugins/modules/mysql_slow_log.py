@@ -62,7 +62,7 @@ options:
 notes:
   - Compatible with MariaDB or MySQL.
   - The module manages global runtime slow-log settings only.
-  - The C(flush) action requires the server privilege needed to execute C(FLUSH SLOW LOGS).
+  - The O(flush) action requires the server privilege needed to execute C(FLUSH SLOW LOGS).
 
 attributes:
   check_mode:
