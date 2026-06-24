@@ -187,6 +187,25 @@
           - clone_preview is changed
           - clone_preview.msg == 'Clone would be started.'
           - "'********' in clone_preview.query"
+          - "'REQUIRE SSL' not in clone_preview.query"
+          - "'REQUIRE NO SSL' not in clone_preview.query"
+      when:
+        - db_engine == 'mysql'
+        - clone_plugin_ready | default(false) | bool
+
+    - name: MySQL clone | Verify recipient database is unchanged after check mode
+      ansible.mysql.mysql_query:
+        <<: *standalone_params
+        query: "SHOW DATABASES LIKE '{{ clone_test_db }}'"
+      register: standalone_check_mode_db
+      when:
+        - db_engine == 'mysql'
+        - clone_plugin_ready | default(false) | bool
+
+    - name: MySQL clone | Assert recipient database is absent after check mode
+      ansible.builtin.assert:
+        that:
+          - standalone_check_mode_db.query_result[0] | length == 0
       when:
         - db_engine == 'mysql'
         - clone_plugin_ready | default(false) | bool
@@ -198,6 +217,7 @@
         donor_port: '{{ mysql_primary_port }}'
         donor_user: '{{ clone_user_name }}'
         donor_password: '{{ clone_user_password }}'
+        require_ssl: true
         wait_timeout: 300
         poll_interval: 2
       register: clone_result
@@ -212,6 +232,9 @@
           - clone_result is changed
           - clone_result.clone_status.STATE == 'Completed'
           - clone_result.clone_progress | length > 0
+          - "'REQUIRE SSL' in clone_result.query"
+          - "'STAGE' in clone_result.clone_progress[0]"
+          - "'STATE' in clone_result.clone_progress[0]"
           - clone_result.msg == 'Clone completed successfully.'
       when:
         - db_engine == 'mysql'
@@ -230,6 +253,53 @@
       ansible.builtin.assert:
         that:
           - standalone_cloned_data.query_result[0][0].value == clone_test_value
+      when:
+        - db_engine == 'mysql'
+        - clone_plugin_ready | default(false) | bool
+
+    - name: MySQL clone | Re-run clone to confirm non-idempotent behavior
+      ansible.mysql.mysql_clone:
+        <<: *standalone_params
+        donor_host: '{{ mysql_host }}'
+        donor_port: '{{ mysql_primary_port }}'
+        donor_user: '{{ clone_user_name }}'
+        donor_password: '{{ clone_user_password }}'
+        require_ssl: true
+        wait_timeout: 300
+        poll_interval: 2
+      register: clone_rerun_result
+      when:
+        - db_engine == 'mysql'
+        - clone_plugin_ready | default(false) | bool
+
+    - name: MySQL clone | Assert clone rerun result
+      ansible.builtin.assert:
+        that:
+          - clone_rerun_result is succeeded
+          - clone_rerun_result is changed
+          - clone_rerun_result.clone_status.STATE == 'Completed'
+          - clone_rerun_result.clone_progress | length > 0
+          - "'REQUIRE SSL' in clone_rerun_result.query"
+          - "'STAGE' in clone_rerun_result.clone_progress[0]"
+          - "'STATE' in clone_rerun_result.clone_progress[0]"
+          - clone_rerun_result.msg == 'Clone completed successfully.'
+      when:
+        - db_engine == 'mysql'
+        - clone_plugin_ready | default(false) | bool
+
+    - name: MySQL clone | Verify cloned data still exists after rerun
+      ansible.mysql.mysql_query:
+        <<: *standalone_params
+        query: "SELECT value FROM {{ clone_test_db }}.{{ clone_test_table }}"
+      register: standalone_cloned_data_after_rerun
+      when:
+        - db_engine == 'mysql'
+        - clone_plugin_ready | default(false) | bool
+
+    - name: MySQL clone | Assert cloned row exists after rerun
+      ansible.builtin.assert:
+        that:
+          - standalone_cloned_data_after_rerun.query_result[0][0].value == clone_test_value
       when:
         - db_engine == 'mysql'
         - clone_plugin_ready | default(false) | bool

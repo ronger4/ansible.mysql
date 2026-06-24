@@ -79,6 +79,10 @@ attributes:
     details:
       - The module is not idempotent because each successful invocation starts a new clone operation.
 
+seealso:
+  - module: ansible.mysql.mysql_variables
+  - module: ansible.mysql.mysql_replication
+
 extends_documentation_fragment:
 - ansible.mysql.mysql
 '''
@@ -333,8 +337,8 @@ def main():
         supports_check_mode=True,
     )
 
-    if module.params['donor_port'] < 0 or module.params['donor_port'] > 65535:
-        module.fail_json(msg='donor_port must be a valid unix port number (0-65535)')
+    if module.params['donor_port'] < 1 or module.params['donor_port'] > 65535:
+        module.fail_json(msg='donor_port must be a valid unix port number (1-65535)')
 
     if module.params['wait_timeout'] <= 0:
         module.fail_json(msg='wait_timeout must be greater than 0')
