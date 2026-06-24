@@ -48,7 +48,6 @@ options:
     description:
       - Whether to log queries that do not use indexes.
     type: bool
-    version_added: '5.1.0'
   min_examined_row_limit:
     description:
       - Log only queries that examine at least this many rows.
