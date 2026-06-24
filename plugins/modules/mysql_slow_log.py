@@ -58,7 +58,6 @@ options:
       - This action is not idempotent and always reports a change when requested.
     type: bool
     default: false
-    version_added: '5.1.0'
 
 notes:
   - Compatible with MariaDB or MySQL.
