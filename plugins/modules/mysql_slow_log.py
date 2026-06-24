@@ -51,7 +51,6 @@ options:
     description:
       - Log only queries that examine at least this many rows.
     type: int
-    version_added: '5.1.0'
   flush:
     description:
       - Rotate the slow query log by executing C(FLUSH SLOW LOGS).
