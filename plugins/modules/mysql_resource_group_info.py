@@ -24,7 +24,6 @@ options:
     description:
       - Limit the collected information to a single resource group name.
     type: str
-    version_added: '5.1.0'
 
 notes:
   - This module supports MySQL 8.0 or later only.
