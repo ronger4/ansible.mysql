@@ -40,7 +40,6 @@ options:
       - The value is immutable after creation.
     type: str
     choices: [SYSTEM, USER]
-    version_added: '5.1.0'
   vcpu_ids:
     description:
       - CPU affinity in native MySQL syntax.
