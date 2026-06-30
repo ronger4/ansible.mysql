@@ -69,6 +69,7 @@ Every voice is important and every idea is valuable. If you have something on yo
   - [mysql_clone](https://docs.ansible.com/ansible/devel/collections/ansible/mysql/mysql_clone_module.html)
   - [mysql_db](https://docs.ansible.com/ansible/devel/collections/ansible/mysql/mysql_db_module.html)
   - [mysql_info](https://docs.ansible.com/ansible/devel/collections/ansible/mysql/mysql_info_module.html)
+  - [mysql_password_policy](https://docs.ansible.com/ansible/devel/collections/ansible/mysql/mysql_password_policy_module.html)
   - [mysql_perf_schema](https://docs.ansible.com/ansible/devel/collections/ansible/mysql/mysql_perf_schema_module.html)
   - [mysql_query](https://docs.ansible.com/ansible/devel/collections/ansible/mysql/mysql_query_module.html)
   - [mysql_replication](https://docs.ansible.com/ansible/devel/collections/ansible/mysql/mysql_replication_module.html)
