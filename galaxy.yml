@@ -15,3 +15,14 @@ repository: https://github.com/ansible-collections/ansible.mysql
 documentation: https://github.com/ansible-collections/ansible.mysql
 homepage: https://github.com/ansible-collections/ansible.mysql
 issues: https://github.com/ansible-collections/ansible.mysql/issues
+build_ignore:
+  - .vscode
+  - tests/integration
+  - tests/unit
+  - changelogs/.plugin-cache.yaml
+  - .github
+  - .agents
+  - .cursor
+  - .claude
+  - .gitignore
+  - .venv
