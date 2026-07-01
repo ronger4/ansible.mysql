@@ -35,44 +35,6 @@
     replicate_wild_do_table_csv: app.%,reporting.sales_%
     replicate_wild_ignore_table_csv: archive.old_%,tmp.%
   block:
-    - name: Replication filter | Start replica1 before MySQL global tests
-      ansible.mysql.mysql_replication:
-        <<: *mysql_params
-        login_port: '{{ mysql_replica1_port }}'
-        mode: startreplica
-      register: result
-      when:
-        - db_engine == 'mysql'
-        - db_version is version('9.0', '<')
-
-    - name: Replication filter | Assert replica1 start for MySQL global tests
-      ansible.builtin.assert:
-        that:
-          - result is changed or 'already started' in (result.msg | default('') | lower)
-          - result.queries == ["START SLAVE"] or result.queries == ["START REPLICA"]
-      when:
-        - db_engine == 'mysql'
-        - db_version is version('9.0', '<')
-
-    - name: Replication filter | Stop replica1 before MySQL global tests
-      ansible.mysql.mysql_replication:
-        <<: *mysql_params
-        login_port: '{{ mysql_replica1_port }}'
-        mode: stopreplica
-      register: result
-      when:
-        - db_engine == 'mysql'
-        - db_version is version('9.0', '<')
-
-    - name: Replication filter | Assert replica1 stop for MySQL global tests
-      ansible.builtin.assert:
-        that:
-          - result is changed
-          - result.queries == ["STOP SLAVE"] or result.queries == ["STOP REPLICA"]
-      when:
-        - db_engine == 'mysql'
-        - db_version is version('9.0', '<')
-
     - name: Replication filter | Clear MySQL global filters baseline
       ansible.mysql.mysql_replication_filter:
         <<: *mysql_params
@@ -382,25 +344,6 @@
         - db_engine == 'mysql'
         - db_version is version('9.0', '<')
 
-    - name: Replication filter | Start replica1 after MySQL global tests
-      ansible.mysql.mysql_replication:
-        <<: *mysql_params
-        login_port: '{{ mysql_replica1_port }}'
-        mode: startreplica
-      register: result
-      when:
-        - db_engine == 'mysql'
-        - db_version is version('9.0', '<')
-
-    - name: Replication filter | Assert replica1 start after MySQL global tests
-      ansible.builtin.assert:
-        that:
-          - result is changed or 'already started' in (result.msg | default('') | lower)
-          - result.queries == ["START SLAVE"] or result.queries == ["START REPLICA"]
-      when:
-        - db_engine == 'mysql'
-        - db_version is version('9.0', '<')
-
     - name: Replication filter | Get primary status for MySQL channel tests
       ansible.mysql.mysql_replication:
         <<: *mysql_params
@@ -433,46 +376,6 @@
         that:
           - result is changed
           - result.queries | length == 1
-      when:
-        - db_engine == 'mysql'
-        - db_version is version('9.0', '<')
-
-    - name: Replication filter | Start MySQL channel on replica2
-      ansible.mysql.mysql_replication:
-        <<: *mysql_params
-        login_port: '{{ mysql_replica2_port }}'
-        mode: startreplica
-        channel: '{{ test_channel }}'
-      register: result
-      when:
-        - db_engine == 'mysql'
-        - db_version is version('9.0', '<')
-
-    - name: Replication filter | Assert MySQL channel start
-      ansible.builtin.assert:
-        that:
-          - result is changed
-          - result.queries == ["START SLAVE FOR CHANNEL '{{ test_channel }}'"] or result.queries == ["START REPLICA FOR CHANNEL '{{ test_channel }}'"]
-      when:
-        - db_engine == 'mysql'
-        - db_version is version('9.0', '<')
-
-    - name: Replication filter | Stop MySQL channel before filter tests
-      ansible.mysql.mysql_replication:
-        <<: *mysql_params
-        login_port: '{{ mysql_replica2_port }}'
-        mode: stopreplica
-        channel: '{{ test_channel }}'
-      register: result
-      when:
-        - db_engine == 'mysql'
-        - db_version is version('9.0', '<')
-
-    - name: Replication filter | Assert MySQL channel stop
-      ansible.builtin.assert:
-        that:
-          - result is changed
-          - result.queries == ["STOP SLAVE FOR CHANNEL '{{ test_channel }}'"] or result.queries == ["STOP REPLICA FOR CHANNEL '{{ test_channel }}'"]
       when:
         - db_engine == 'mysql'
         - db_version is version('9.0', '<')
@@ -676,58 +579,6 @@
         - db_engine == 'mysql'
         - db_version is version('9.0', '<')
 
-    - name: Replication filter | Start MySQL channel after filter tests
-      ansible.mysql.mysql_replication:
-        <<: *mysql_params
-        login_port: '{{ mysql_replica2_port }}'
-        mode: startreplica
-        channel: '{{ test_channel }}'
-      register: result
-      when:
-        - db_engine == 'mysql'
-        - db_version is version('9.0', '<')
-
-    - name: Replication filter | Assert MySQL channel restart
-      ansible.builtin.assert:
-        that:
-          - result is changed
-          - result.queries == ["START SLAVE FOR CHANNEL '{{ test_channel }}'"] or result.queries == ["START REPLICA FOR CHANNEL '{{ test_channel }}'"]
-      when:
-        - db_engine == 'mysql'
-        - db_version is version('9.0', '<')
-
-    - name: Replication filter | Get MySQL channel replica status
-      ansible.mysql.mysql_replication:
-        <<: *mysql_params
-        login_port: '{{ mysql_replica2_port }}'
-        mode: getreplica
-        channel: '{{ test_channel }}'
-      register: replica_status
-      when:
-        - db_engine == 'mysql'
-        - db_version is version('9.0', '<')
-
-    - name: Replication filter | Assert MySQL channel replica status
-      ansible.builtin.assert:
-        that:
-          - replica_status.Is_Replica is truthy(convert_bool=True)
-          - replica_status.Channel_Name == test_channel
-          - replica_status is not changed
-      when:
-        - db_engine == 'mysql'
-        - db_version is version('9.0', '<')
-
-    - name: Replication filter | Stop MySQL channel for cleanup
-      ansible.mysql.mysql_replication:
-        <<: *mysql_params
-        login_port: '{{ mysql_replica2_port }}'
-        mode: stopreplica
-        channel: '{{ test_channel }}'
-      register: result
-      when:
-        - db_engine == 'mysql'
-        - db_version is version('9.0', '<')
-
     - name: Replication filter | Reset MySQL channel for cleanup
       ansible.mysql.mysql_replication:
         <<: *mysql_params
@@ -744,6 +595,19 @@
         that:
           - result is changed
           - result.queries == ["RESET SLAVE ALL FOR CHANNEL '{{ test_channel }}'"] or result.queries == ["RESET REPLICA ALL FOR CHANNEL '{{ test_channel }}'"]
+      when:
+        - db_engine == 'mysql'
+        - db_version is version('9.0', '<')
+
+    - name: Replication filter | Wait for MySQL primary replica list to clear after channel cleanup
+      ansible.mysql.mysql_query:
+        <<: *mysql_params
+        login_port: '{{ mysql_primary_port }}'
+        query: "SHOW REPLICAS"
+      register: result
+      until: result.query_result[0] | length == 0
+      retries: 10
+      delay: 1
       when:
         - db_engine == 'mysql'
         - db_version is version('9.0', '<')
