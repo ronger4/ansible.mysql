@@ -72,6 +72,7 @@ Every voice is important and every idea is valuable. If you have something on yo
   - [mysql_perf_schema](https://docs.ansible.com/ansible/devel/collections/ansible/mysql/mysql_perf_schema_module.html)
   - [mysql_query](https://docs.ansible.com/ansible/devel/collections/ansible/mysql/mysql_query_module.html)
   - [mysql_replication](https://docs.ansible.com/ansible/devel/collections/ansible/mysql/mysql_replication_module.html)
+  - [mysql_replication_filter](https://docs.ansible.com/ansible/devel/collections/ansible/mysql/mysql_replication_filter_module.html)
   - [mysql_resource_group](https://docs.ansible.com/ansible/devel/collections/ansible/mysql/mysql_resource_group_module.html)
   - [mysql_resource_group_info](https://docs.ansible.com/ansible/devel/collections/ansible/mysql/mysql_resource_group_info_module.html)
   - [mysql_role](https://docs.ansible.com/ansible/devel/collections/ansible/mysql/mysql_role_module.html)

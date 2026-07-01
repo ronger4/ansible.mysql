@@ -1,0 +1,11 @@
+mysql_user: root
+mysql_password: msandbox
+mysql_host: '{{ gateway_addr }}'
+mysql_primary_port: 3307
+mysql_replica1_port: 3308
+mysql_replica2_port: 3309
+
+replication_user: replication_user
+replication_pass: replication_pass
+test_channel: test_channel-1
+test_connection_name: test_connection_name_1

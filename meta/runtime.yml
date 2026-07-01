@@ -9,6 +9,7 @@ action_groups:
     - mysql_perf_schema
     - mysql_query
     - mysql_replication
+    - mysql_replication_filter
     - mysql_resource_group
     - mysql_resource_group_info
     - mysql_role
